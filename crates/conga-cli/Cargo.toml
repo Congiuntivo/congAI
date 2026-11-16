@@ -5,3 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[dependencies]
+conga-core = { path = "../conga-core" }
+conga-rules = { path = "../conga-rules" }
+clap = { workspace = true }
+rand_chacha = { workspace = true }
+rand_core = { workspace = true }
