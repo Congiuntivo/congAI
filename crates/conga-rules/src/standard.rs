@@ -173,6 +173,38 @@ impl StandardConga {
         }
     }
 
+    /// The Conga bonus trigger: a 7-card run in one suit. Checked via
+    /// bitmask: in the standard-40 encoding a 7-card run occupies 7
+    /// consecutive bits within one of the four 10-bit suit groups.
+    fn is_conga(hand: Hand) -> bool {
+        if hand.len() != 7 {
+            return false;
+        }
+        let bits = hand.bits();
+        for suit_idx in 0..4u8 {
+            let base = suit_idx * (Rank::MAX);
+            // Starting ranks 1..=4 yield 7-card runs ending at 7..=10.
+            for start_offset in 0..=(Rank::MAX - 7) {
+                let pattern = 0x7Fu64 << (base + start_offset);
+                if bits == pattern {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn detect_close_bonus(&self, closer_hand_at_close: Hand) -> Option<Bonus> {
+        if Self::is_conga(closer_hand_at_close) {
+            return Some(Bonus::MinusFifty);
+        }
+        let split = best_meld_split(closer_hand_at_close, &self.meld_params);
+        if split.unmatched.is_empty() {
+            return Some(Bonus::MinusTen);
+        }
+        None
+    }
+
     /// The hand that would remain after applying a showdown placement action.
     fn hand_after_showdown_placement(&self, hand: Hand, action: &Action) -> Hand {
         let mut h = hand;
@@ -512,12 +544,34 @@ impl RuleSet for StandardConga {
         if state.phase != Phase::Ended {
             return None;
         }
-        // Slice 7 fills in real scoring with the -10 and -50 bonuses and the
-        // per-seat sums. In slice 5, no code path ever sets phase to Ended,
-        // so this branch is only reachable in later slices.
-        let bonus: Option<Bonus> = None;
+        // Each seat scores the value of the cards still in its hand. Cards
+        // on the table cost nothing. Rule 8 bonuses apply only to the closer
+        // and are checked against the closer's hand at the moment of close.
+        let mut points: Vec<i32> = (0..state.seats_count)
+            .map(|seat_idx| {
+                let hand = state.hands[seat_idx as usize];
+                hand.iter().map(|c| c.rank().point_value() as i32).sum()
+            })
+            .collect();
+
+        let bonus = match (state.closer, state.closer_hand_at_close) {
+            (Some(closer_seat), Some(closer_hand)) => {
+                let b = self.detect_close_bonus(closer_hand);
+                if let Some(kind) = b {
+                    let closer_idx = closer_seat.index() as usize;
+                    let delta: i32 = match kind {
+                        Bonus::MinusTen => -10,
+                        Bonus::MinusFifty => -50,
+                    };
+                    points[closer_idx] += delta;
+                }
+                b
+            }
+            _ => None,
+        };
+
         Some(HandResult {
-            points: vec![0; state.seats_count as usize],
+            points,
             closer: state.closer,
             bonus,
         })
@@ -1161,6 +1215,319 @@ mod tests {
         );
         assert!(actions.iter().any(|a| matches!(a, Action::LayMeld(_))));
         assert!(actions.contains(&Action::Pass));
+    }
+
+    // --- scoring, bonuses, elimination ---
+
+    /// Drive a specific closing hand into `Phase::Ended` with the showdown
+    /// scripted. Returns the rules, final state and HandResult.
+    fn play_showdown_to_end(
+        closer_hand_after_close: Hand,
+        close_card: Card,
+        opp_hand: Hand,
+        closer_plays: &[Action],
+        opp_plays: &[Action],
+    ) -> (StandardConga, State, Option<HandResult>) {
+        let rules = StandardConga::new();
+        let state = State {
+            seats_count: 2,
+            // Before Close(close_card): closer has closer_hand_after_close + close_card.
+            hands: vec![
+                {
+                    let mut h = closer_hand_after_close;
+                    h.insert(close_card);
+                    h
+                },
+                opp_hand,
+            ],
+            stock: Vec::new(),
+            discard_pile: vec![c(Suit::Clubs, 9)],
+            scores: vec![0, 0],
+            dealer: Seat::new(1),
+            current_seat: Seat::new(0),
+            phase: Phase::Discard,
+            melds_on_table: Vec::new(),
+            first_turn_done: vec![true, true],
+            must_not_discard: None,
+            closer: None,
+            closer_hand_at_close: None,
+            closer_has_opened: false,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
+        };
+        let mut rules_state = state;
+        let mut events = Vec::new();
+        let mut rng = chance(0);
+        rules.apply(
+            &mut rules_state,
+            Action::Close(close_card),
+            &mut rng,
+            &mut events,
+        );
+        for act in closer_plays {
+            rules.apply(&mut rules_state, act.clone(), &mut rng, &mut events);
+        }
+        // Closer passes.
+        rules.apply(&mut rules_state, Action::Pass, &mut rng, &mut events);
+        for act in opp_plays {
+            rules.apply(&mut rules_state, act.clone(), &mut rng, &mut events);
+        }
+        // Opponent passes.
+        rules.apply(&mut rules_state, Action::Pass, &mut rng, &mut events);
+        let result = rules.hand_result(&rules_state);
+        (rules, rules_state, result)
+    }
+
+    #[test]
+    fn score_regular_close_has_no_bonus_closer_pays_unmatched() {
+        // Closer: 1C 1D 1H 2C 2D 2H 3S + closes with 9C. Residual unmatched
+        // is {3S}, value 3. Opponent: 5S 6S 7S 10C 10D 10H + 4S (keeps all).
+        let closer_residual: Hand = [
+            c(Suit::Clubs, 1),
+            c(Suit::Diamonds, 1),
+            c(Suit::Hearts, 1),
+            c(Suit::Clubs, 2),
+            c(Suit::Diamonds, 2),
+            c(Suit::Hearts, 2),
+            c(Suit::Spades, 3),
+        ]
+        .as_slice()
+        .into();
+        let opp_hand: Hand = [
+            c(Suit::Spades, 5),
+            c(Suit::Spades, 6),
+            c(Suit::Spades, 7),
+            c(Suit::Clubs, 10),
+            c(Suit::Diamonds, 10),
+            c(Suit::Hearts, 10),
+            c(Suit::Spades, 4),
+        ]
+        .as_slice()
+        .into();
+
+        let set_ones = Action::LayMeld(Meld {
+            kind: MeldKind::Set,
+            cards: Hand::from(
+                [c(Suit::Clubs, 1), c(Suit::Diamonds, 1), c(Suit::Hearts, 1)].as_slice(),
+            ),
+        });
+        let set_twos = Action::LayMeld(Meld {
+            kind: MeldKind::Set,
+            cards: Hand::from(
+                [c(Suit::Clubs, 2), c(Suit::Diamonds, 2), c(Suit::Hearts, 2)].as_slice(),
+            ),
+        });
+        let (_, _, result) = play_showdown_to_end(
+            closer_residual,
+            c(Suit::Clubs, 9),
+            opp_hand,
+            &[set_ones, set_twos],
+            &[], // opponent keeps everything
+        );
+        let r = result.unwrap();
+        assert_eq!(r.closer, Some(Seat::new(0)));
+        assert_eq!(r.bonus, None);
+        assert_eq!(r.points[0], 3); // 3S left unmatched
+        // Opponent kept all 7 cards: 5+6+7+10+10+10+4 = 52.
+        assert_eq!(r.points[1], 5 + 6 + 7 + 10 + 10 + 10 + 4);
+    }
+
+    #[test]
+    fn score_zero_unmatched_close_gives_closer_minus_ten() {
+        // Closer: 1C 1D 1H + run 5S-6S-7S-8S = 7 cards all melded. Closes
+        // with 9C face-down.
+        let closer_residual: Hand = [
+            c(Suit::Clubs, 1),
+            c(Suit::Diamonds, 1),
+            c(Suit::Hearts, 1),
+            c(Suit::Spades, 5),
+            c(Suit::Spades, 6),
+            c(Suit::Spades, 7),
+            c(Suit::Spades, 8),
+        ]
+        .as_slice()
+        .into();
+        let opp_hand: Hand = [
+            c(Suit::Clubs, 2),
+            c(Suit::Diamonds, 2),
+            c(Suit::Hearts, 2),
+            c(Suit::Clubs, 4),
+            c(Suit::Diamonds, 4),
+            c(Suit::Hearts, 4),
+            c(Suit::Spades, 3),
+        ]
+        .as_slice()
+        .into();
+
+        let set_ones = Action::LayMeld(Meld {
+            kind: MeldKind::Set,
+            cards: Hand::from(
+                [c(Suit::Clubs, 1), c(Suit::Diamonds, 1), c(Suit::Hearts, 1)].as_slice(),
+            ),
+        });
+        let run_spades = Action::LayMeld(Meld {
+            kind: MeldKind::Run,
+            cards: Hand::from(
+                [
+                    c(Suit::Spades, 5),
+                    c(Suit::Spades, 6),
+                    c(Suit::Spades, 7),
+                    c(Suit::Spades, 8),
+                ]
+                .as_slice(),
+            ),
+        });
+        let (_, _, result) = play_showdown_to_end(
+            closer_residual,
+            c(Suit::Clubs, 9),
+            opp_hand,
+            &[set_ones, run_spades],
+            &[],
+        );
+        let r = result.unwrap();
+        assert_eq!(r.closer, Some(Seat::new(0)));
+        assert_eq!(r.bonus, Some(Bonus::MinusTen));
+        // Closer: 0 points for residual (nothing in hand) + (-10) bonus.
+        assert_eq!(r.points[0], -10);
+        assert_eq!(r.points[1], 2 + 2 + 2 + 4 + 4 + 4 + 3);
+    }
+
+    #[test]
+    fn score_conga_close_gives_closer_minus_fifty() {
+        // Closer: 1C 2C 3C 4C 5C 6C 7C = 7-card run of Clubs. Closes with 9D.
+        let closer_residual: Hand = (1u8..=7)
+            .map(|r| c(Suit::Clubs, r))
+            .collect::<Vec<_>>()
+            .as_slice()
+            .into();
+        let opp_hand: Hand = [
+            c(Suit::Spades, 5),
+            c(Suit::Spades, 6),
+            c(Suit::Spades, 7),
+            c(Suit::Clubs, 10),
+            c(Suit::Diamonds, 10),
+            c(Suit::Hearts, 10),
+            c(Suit::Spades, 4),
+        ]
+        .as_slice()
+        .into();
+
+        let run = Action::LayMeld(Meld {
+            kind: MeldKind::Run,
+            cards: closer_residual,
+        });
+        let (_, _, result) =
+            play_showdown_to_end(closer_residual, c(Suit::Diamonds, 9), opp_hand, &[run], &[]);
+        let r = result.unwrap();
+        assert_eq!(r.closer, Some(Seat::new(0)));
+        assert_eq!(r.bonus, Some(Bonus::MinusFifty));
+        assert_eq!(r.points[0], -50);
+        assert_eq!(r.points[1], 5 + 6 + 7 + 10 + 10 + 10 + 4);
+    }
+
+    #[test]
+    fn hand_result_is_none_while_not_ended() {
+        let rules = StandardConga::new();
+        let mut rng = chance(1);
+        let state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
+        assert!(rules.hand_result(&state).is_none());
+    }
+
+    #[test]
+    fn is_conga_detects_7_card_runs_in_every_suit_and_every_start() {
+        for suit in Suit::ALL {
+            for start in 1u8..=4 {
+                let hand: Hand = (start..start + 7)
+                    .map(|r| c(suit, r))
+                    .collect::<Vec<_>>()
+                    .as_slice()
+                    .into();
+                assert!(
+                    StandardConga::is_conga(hand),
+                    "expected Conga for suit {suit:?} starting at rank {start}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn is_conga_rejects_non_conga_hands() {
+        // 7 cards same suit but not consecutive.
+        let hand: Hand = [
+            c(Suit::Spades, 1),
+            c(Suit::Spades, 2),
+            c(Suit::Spades, 3),
+            c(Suit::Spades, 4),
+            c(Suit::Spades, 5),
+            c(Suit::Spades, 6),
+            c(Suit::Spades, 8),
+        ]
+        .as_slice()
+        .into();
+        assert!(!StandardConga::is_conga(hand));
+
+        // 7 cards consecutive but mixed suits.
+        let hand: Hand = [
+            c(Suit::Spades, 1),
+            c(Suit::Clubs, 2),
+            c(Suit::Spades, 3),
+            c(Suit::Spades, 4),
+            c(Suit::Spades, 5),
+            c(Suit::Spades, 6),
+            c(Suit::Spades, 7),
+        ]
+        .as_slice()
+        .into();
+        assert!(!StandardConga::is_conga(hand));
+    }
+
+    // --- match_status ---
+
+    #[test]
+    fn match_status_in_progress_when_multiple_under_limit() {
+        let rules = StandardConga::new();
+        assert_eq!(rules.match_status(&[10, 20, 30]), MatchStatus::InProgress);
+        assert_eq!(
+            rules.match_status(&[0, 0, 100, 150]),
+            MatchStatus::InProgress
+        );
+    }
+
+    #[test]
+    fn match_status_exactly_100_still_in() {
+        let rules = StandardConga::new();
+        assert_eq!(
+            rules.match_status(&[100, 101]),
+            MatchStatus::Winner(Seat::new(0))
+        );
+    }
+
+    #[test]
+    fn match_status_last_remaining_wins() {
+        let rules = StandardConga::new();
+        assert_eq!(
+            rules.match_status(&[200, 50, 300]),
+            MatchStatus::Winner(Seat::new(1))
+        );
+    }
+
+    #[test]
+    fn match_status_all_eliminated_lowest_score_wins() {
+        let rules = StandardConga::new();
+        assert_eq!(
+            rules.match_status(&[150, 110, 300]),
+            MatchStatus::Winner(Seat::new(1))
+        );
+    }
+
+    #[test]
+    fn match_status_tie_breaks_by_seat_order_on_equal_lowest() {
+        let rules = StandardConga::new();
+        // Seat 1 and seat 3 tie at 110; seat 1 wins by seat index.
+        assert_eq!(
+            rules.match_status(&[200, 110, 150, 110]),
+            MatchStatus::Winner(Seat::new(1))
+        );
     }
 
     #[test]
