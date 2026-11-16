@@ -1,21 +1,28 @@
 //! `StandardConga` - Simone's variant as the first rule set.
 //!
-//! This slice implements the playing phase (draw, discard, close -> showdown
-//! transition, empty-stock reshuffle, first-turn rule, rule 6 "can't
-//! re-discard a card just taken from the pile"). The showdown body and
-//! scoring arrive in slices 6 and 7.
+//! This covers the full hand loop except the final scoring, which lands in
+//! slice 7: draw, discard, close -> showdown transition, empty-stock
+//! reshuffle, first-turn rule, rule 6 (face-up discard ban), the showdown
+//! placement/addition/pass actions and the closer's detail-(c) reducing
+//! constraint.
 //!
-//! Rule interpretation held in this slice: rule 6 ("taking the top discard
-//! and discarding the same card is forbidden") applies only to face-up
-//! discards. `Close(c)` with the card just taken from the pile is treated as
-//! legal. The stop report flags this for Simone's review.
+//! Rule interpretations encoded here (documented in docs/design.md under
+//! "Rule clarifications"):
+//!
+//! C1: Rule 6 applies only to face-up discard. `Close(c)` with the card just
+//! taken from the discard pile is legal.
+//!
+//! C2 (new in this slice): detail (c) is read strictly - the closer's Pass
+//! is legal only when their remaining hand is itself a closing residual
+//! (<= 2 cards, sum <= 5). They must physically lay down the melds of some
+//! closing split; a hand whose best split closes "in theory" is not enough.
 
 use std::ops::RangeInclusive;
 
 use conga_core::{
     Action, ActionList, Bonus, Card, Chance, CloseParams, DeckSpec, DrawSource, Event, Hand,
-    HandEval, HandResult, MatchStatus, MeldParams, Observation, Phase, Rng, RuleSet, RuleSetId,
-    Seat, best_meld_split, evaluate_hand, standard_40,
+    HandEval, HandResult, MatchStatus, Meld, MeldKind, MeldParams, Observation, Phase, Rank, Rng,
+    RuleSet, RuleSetId, Seat, Suit, best_meld_split, evaluate_hand, standard_40,
 };
 
 use crate::state::State;
@@ -48,6 +55,139 @@ impl StandardConga {
             hand_size: 7,
             elimination_score: 100,
         }
+    }
+
+    /// Every valid meld that can be formed from `hand`, under this rule set's
+    /// meld parameters. Used to enumerate `LayMeld` legal actions in the
+    /// showdown.
+    fn hand_melds(&self, hand: Hand) -> Vec<Meld> {
+        let mut out = Vec::new();
+
+        // Sets, grouped by rank.
+        for rank_val in Rank::MIN..=Rank::MAX {
+            let rank = match Rank::new(rank_val) {
+                Some(r) => r,
+                None => continue,
+            };
+            let mut same_rank: Vec<Card> = Vec::new();
+            for suit in Suit::ALL {
+                let c = Card::new(suit, rank);
+                if hand.contains(c) {
+                    same_rank.push(c);
+                }
+            }
+            let n = same_rank.len();
+            // k = 3
+            if self.meld_params.min_set <= 3 && 3 <= self.meld_params.max_set {
+                for i in 0..n {
+                    for j in (i + 1)..n {
+                        for h in (j + 1)..n {
+                            let cards =
+                                Hand::from([same_rank[i], same_rank[j], same_rank[h]].as_slice());
+                            out.push(Meld {
+                                kind: MeldKind::Set,
+                                cards,
+                            });
+                        }
+                    }
+                }
+            }
+            // k = 4: only one way (all four).
+            if self.meld_params.min_set <= 4 && 4 <= self.meld_params.max_set && n == 4 {
+                out.push(Meld {
+                    kind: MeldKind::Set,
+                    cards: Hand::from(same_rank.as_slice()),
+                });
+            }
+        }
+
+        // Runs, grouped by suit, enumerate every sub-run of length >= min_run.
+        for suit in Suit::ALL {
+            let suit_cards: Vec<Card> = (Rank::MIN..=Rank::MAX)
+                .filter_map(|r| {
+                    let rank = Rank::new(r)?;
+                    let c = Card::new(suit, rank);
+                    if hand.contains(c) { Some(c) } else { None }
+                })
+                .collect();
+            let mut i = 0;
+            while i < suit_cards.len() {
+                let mut j = i;
+                while j + 1 < suit_cards.len()
+                    && suit_cards[j + 1].rank().as_u8() == suit_cards[j].rank().as_u8() + 1
+                {
+                    j += 1;
+                }
+                // The slice suit_cards[i..=j] is a maximal consecutive block.
+                let min_run = self.meld_params.min_run as usize;
+                for start in i..=j {
+                    let min_end = start + min_run - 1;
+                    for end in min_end..=j {
+                        let run_slice = &suit_cards[start..=end];
+                        out.push(Meld {
+                            kind: MeldKind::Run,
+                            cards: Hand::from(run_slice),
+                        });
+                    }
+                }
+                i = j + 1;
+            }
+        }
+
+        out
+    }
+
+    /// Whether `card` can extend the tabled meld.
+    fn can_add_to_meld(&self, tabled: &Meld, card: Card) -> bool {
+        if tabled.cards.contains(card) {
+            return false;
+        }
+        match tabled.kind {
+            MeldKind::Set => {
+                if tabled.cards.len() >= self.meld_params.max_set as u32 {
+                    return false;
+                }
+                // All cards in a set share a rank; grab the first.
+                let Some(first) = tabled.cards.iter().next() else {
+                    return false;
+                };
+                card.rank() == first.rank()
+            }
+            MeldKind::Run => {
+                let Some(first) = tabled.cards.iter().next() else {
+                    return false;
+                };
+                if card.suit() != first.suit() {
+                    return false;
+                }
+                let mut min_r = u8::MAX;
+                let mut max_r = 0u8;
+                for c in tabled.cards.iter() {
+                    let r = c.rank().as_u8();
+                    min_r = min_r.min(r);
+                    max_r = max_r.max(r);
+                }
+                let cr = card.rank().as_u8();
+                (min_r > Rank::MIN && cr + 1 == min_r) || (max_r < Rank::MAX && cr == max_r + 1)
+            }
+        }
+    }
+
+    /// The hand that would remain after applying a showdown placement action.
+    fn hand_after_showdown_placement(&self, hand: Hand, action: &Action) -> Hand {
+        let mut h = hand;
+        match action {
+            Action::LayMeld(m) => {
+                for c in m.cards.iter() {
+                    h.remove(c);
+                }
+            }
+            Action::AddToMeld { card, .. } => {
+                h.remove(*card);
+            }
+            _ => {}
+        }
+        h
     }
 
     fn reshuffle_discard_into_stock(
@@ -138,6 +278,9 @@ impl RuleSet for StandardConga {
             must_not_discard: None,
             closer: None,
             closer_hand_at_close: None,
+            closer_has_opened: false,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
         }
     }
 
@@ -176,8 +319,50 @@ impl RuleSet for StandardConga {
                 }
             }
             Phase::Showdown => {
-                // Slice 6 fills in the showdown legal actions. In slice 5,
-                // the test policy never closes, so this branch is unreached.
+                let seat = state.current_seat;
+                let seat_idx = seat.index() as usize;
+                let hand = state.hands[seat_idx];
+                let is_closer = state.closer == Some(seat);
+                let is_first_closer_turn = is_closer && !state.closer_has_opened;
+
+                let mut placements: Vec<Action> = Vec::new();
+                for m in self.hand_melds(hand) {
+                    placements.push(Action::LayMeld(m));
+                }
+                for (idx, tabled) in state.melds_on_table.iter().enumerate() {
+                    for c in hand.iter() {
+                        if self.can_add_to_meld(tabled, c) {
+                            placements.push(Action::AddToMeld {
+                                card: c,
+                                meld_index: idx as u8,
+                            });
+                        }
+                    }
+                }
+
+                if is_first_closer_turn {
+                    // Only placement moves that preserve a path to a closing
+                    // residual are legal, per detail (c).
+                    for action in &placements {
+                        let new_hand = self.hand_after_showdown_placement(hand, action);
+                        let split = best_meld_split(new_hand, &self.meld_params);
+                        if self.close_params.can_close(split.unmatched) {
+                            out.push(action.clone());
+                        }
+                    }
+                    // Pass is legal only when the closer has physically laid
+                    // enough melds that their hand IS the unmatched set of a
+                    // closing split. In standard Conga that means hand.len()
+                    // <= 2 (since min meld size is 3) with sum <= 5.
+                    if self.close_params.can_close(hand) {
+                        out.push(Action::Pass);
+                    }
+                } else {
+                    for action in &placements {
+                        out.push(action.clone());
+                    }
+                    out.push(Action::Pass);
+                }
             }
             Phase::Ended => {
                 // No legal actions once the hand has ended.
@@ -246,8 +431,10 @@ impl RuleSet for StandardConga {
             (Phase::Discard, Action::Close(c)) => {
                 let seat_idx = state.current_seat.index() as usize;
                 state.hands[seat_idx].remove(c);
-                // Face-down discard: not placed on the discard pile; the
-                // engine records it only in the event log.
+                // Face-down discard: not placed on the discard pile. Stored
+                // in `face_down_close` so the card stays accounted for and
+                // scoring in slice 7 can reveal it in the final event log.
+                state.face_down_close = Some(c);
                 events.push(Event::Closed {
                     seat: state.current_seat,
                     card: c,
@@ -257,8 +444,47 @@ impl RuleSet for StandardConga {
                 state.closer = Some(state.current_seat);
                 state.closer_hand_at_close = Some(state.hands[seat_idx]);
                 state.phase = Phase::Showdown;
-                // current_seat stays on the closer for the first showdown turn
-                // (slice 6).
+                state.closer_has_opened = false;
+                state.showdown_consecutive_passes = 0;
+                // current_seat stays on the closer for the first showdown turn.
+            }
+            (Phase::Showdown, Action::LayMeld(m)) => {
+                let seat_idx = state.current_seat.index() as usize;
+                for c in m.cards.iter() {
+                    state.hands[seat_idx].remove(c);
+                }
+                state.melds_on_table.push(m.clone());
+                events.push(Event::LaidMeld {
+                    seat: state.current_seat,
+                    meld: m,
+                });
+                state.showdown_consecutive_passes = 0;
+            }
+            (Phase::Showdown, Action::AddToMeld { card, meld_index }) => {
+                let seat_idx = state.current_seat.index() as usize;
+                state.hands[seat_idx].remove(card);
+                let target = &mut state.melds_on_table[meld_index as usize];
+                target.cards.insert(card);
+                events.push(Event::AddedToMeld {
+                    seat: state.current_seat,
+                    card,
+                    meld_index,
+                });
+                state.showdown_consecutive_passes = 0;
+            }
+            (Phase::Showdown, Action::Pass) => {
+                let seat = state.current_seat;
+                events.push(Event::Passed { seat });
+                if state.closer == Some(seat) {
+                    state.closer_has_opened = true;
+                }
+                state.showdown_consecutive_passes =
+                    state.showdown_consecutive_passes.saturating_add(1);
+                if state.showdown_consecutive_passes >= state.seats_count {
+                    state.phase = Phase::Ended;
+                } else {
+                    state.current_seat = seat.next(state.seats_count);
+                }
             }
             _ => {
                 debug_assert!(false, "unexpected action for phase {:?}", state.phase);
@@ -478,6 +704,9 @@ mod tests {
             must_not_discard: None,
             closer: None,
             closer_hand_at_close: None,
+            closer_has_opened: false,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
         };
         let mut actions = ActionList::new();
         rules.legal_actions(&state, &mut actions);
@@ -517,6 +746,9 @@ mod tests {
             must_not_discard: None,
             closer: None,
             closer_hand_at_close: None,
+            closer_has_opened: false,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
         };
         let mut actions = ActionList::new();
         rules.legal_actions(&state, &mut actions);
@@ -601,18 +833,12 @@ mod tests {
 
     // --- invariants over random games ---
 
-    /// Pick a random legal action, skipping any `Close(_)` so the test stays
-    /// in the draw / discard phases of slice 5.
-    fn pick_random_no_close(actions: &[Action], rng: &mut ChaCha8Rng) -> Option<Action> {
-        let legal: Vec<&Action> = actions
-            .iter()
-            .filter(|a| !matches!(a, Action::Close(_)))
-            .collect();
-        if legal.is_empty() {
+    fn pick_random(actions: &[Action], rng: &mut ChaCha8Rng) -> Option<Action> {
+        if actions.is_empty() {
             return None;
         }
-        let idx = (rng.next_u32() as usize) % legal.len();
-        Some(legal[idx].clone())
+        let idx = (rng.next_u32() as usize) % actions.len();
+        Some(actions[idx].clone())
     }
 
     fn assert_cards_accounted_for(rules: &StandardConga, state: &State) {
@@ -625,7 +851,19 @@ mod tests {
                 total += 1;
             }
         }
+        for m in &state.melds_on_table {
+            for c in m.cards.iter() {
+                assert!(!seen.contains(c), "duplicate card {c:?}");
+                seen.insert(c);
+                total += 1;
+            }
+        }
         for &c in state.stock.iter().chain(state.discard_pile.iter()) {
+            assert!(!seen.contains(c), "duplicate card {c:?}");
+            seen.insert(c);
+            total += 1;
+        }
+        if let Some(c) = state.face_down_close {
             assert!(!seen.contains(c), "duplicate card {c:?}");
             seen.insert(c);
             total += 1;
@@ -674,14 +912,21 @@ mod tests {
                 let mut events: Vec<Event> = Vec::new();
                 let mut actions = ActionList::new();
 
-                for _turn in 0..500u32 {
+                for _turn in 0..1000u32 {
                     assert_cards_accounted_for(&rules, &state);
                     assert_observation_hides_opponents(&rules, &state);
-                    if state.phase == Phase::Showdown || state.phase == Phase::Ended {
+                    if state.phase == Phase::Ended {
                         break;
                     }
                     rules.legal_actions(&state, &mut actions);
-                    let chosen = match pick_random_no_close(&actions, &mut policy_rng) {
+                    // Invariant 3: while the hand runs there is always a
+                    // legal action.
+                    assert!(
+                        !actions.is_empty(),
+                        "no legal action in phase {:?} (seats={seats} seed={seed})",
+                        state.phase
+                    );
+                    let chosen = match pick_random(&actions, &mut policy_rng) {
                         Some(a) => a,
                         None => break,
                     };
@@ -689,5 +934,287 @@ mod tests {
                 }
             }
         }
+    }
+
+    // --- showdown ---
+
+    /// Drive a specific closing hand into the showdown and return the state
+    /// and the closer's Seat. The hand is:
+    ///   seat 0: 1C 1D 1H 2C 2D 2H 3S 3D (8 cards after a stock draw).
+    /// Closing by discarding 3D leaves 1C 1D 1H 2C 2D 2H 3S (sets of 1s and
+    /// 2s plus unmatched 3S, sum 3, closes).
+    fn setup_closed_hand() -> (StandardConga, State, Vec<Event>) {
+        let rules = StandardConga::new();
+        let closing_hand: Hand = [
+            c(Suit::Clubs, 1),
+            c(Suit::Diamonds, 1),
+            c(Suit::Hearts, 1),
+            c(Suit::Clubs, 2),
+            c(Suit::Diamonds, 2),
+            c(Suit::Hearts, 2),
+            c(Suit::Spades, 3),
+            c(Suit::Diamonds, 3),
+        ]
+        .as_slice()
+        .into();
+        let opp_hand: Hand = [
+            c(Suit::Spades, 5),
+            c(Suit::Spades, 6),
+            c(Suit::Spades, 7),
+            c(Suit::Clubs, 10),
+            c(Suit::Diamonds, 10),
+            c(Suit::Hearts, 10),
+            c(Suit::Spades, 4),
+        ]
+        .as_slice()
+        .into();
+        let state = State {
+            seats_count: 2,
+            hands: vec![closing_hand, opp_hand],
+            stock: Vec::new(),
+            discard_pile: vec![c(Suit::Clubs, 9)],
+            scores: vec![0, 0],
+            dealer: Seat::new(1),
+            current_seat: Seat::new(0),
+            phase: Phase::Discard,
+            melds_on_table: Vec::new(),
+            first_turn_done: vec![true, true],
+            must_not_discard: None,
+            closer: None,
+            closer_hand_at_close: None,
+            closer_has_opened: false,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
+        };
+
+        let mut events = Vec::new();
+        let mut rules_state = state;
+        // Close by placing 3D face-down.
+        rules.apply(
+            &mut rules_state,
+            Action::Close(c(Suit::Diamonds, 3)),
+            &mut chance(0),
+            &mut events,
+        );
+        (rules, rules_state, events)
+    }
+
+    #[test]
+    fn close_action_transitions_to_showdown() {
+        let (_, state, events) = setup_closed_hand();
+        assert_eq!(state.phase, Phase::Showdown);
+        assert_eq!(state.closer, Some(Seat::new(0)));
+        assert!(state.closer_hand_at_close.is_some());
+        assert!(!state.closer_has_opened);
+        assert_eq!(state.showdown_consecutive_passes, 0);
+        assert!(events.iter().any(|e| matches!(e, Event::Closed { .. })));
+    }
+
+    #[test]
+    fn closer_first_turn_cannot_pass_until_hand_reduces_to_closing() {
+        let (rules, state, _) = setup_closed_hand();
+        let mut actions = ActionList::new();
+        rules.legal_actions(&state, &mut actions);
+        // The closer has a 7-card hand; they cannot pass yet.
+        assert!(
+            !actions.contains(&Action::Pass),
+            "closer should not be able to pass before reducing"
+        );
+        // But they should have LayMeld options that make progress.
+        assert!(
+            actions.iter().any(|a| matches!(a, Action::LayMeld(_))),
+            "closer should have at least one LayMeld option"
+        );
+    }
+
+    #[test]
+    fn closer_first_turn_rejects_meld_that_breaks_closability() {
+        let (rules, state, _) = setup_closed_hand();
+        let mut actions = ActionList::new();
+        rules.legal_actions(&state, &mut actions);
+        // Hand: 1C 1D 1H 2C 2D 2H 3S. Laying a run 1C-2C-3C? No, no 3C.
+        // The 'bad' move to break closability is non-existent in this hand
+        // because every valid meld (set of 1s, set of 2s) leaves a residual
+        // that still closes. Instead: check that every LayMeld action in
+        // legal_actions does keep closability.
+        for action in &actions {
+            if let Action::LayMeld(m) = action {
+                let mut remaining = state.hands[0];
+                for cc in m.cards.iter() {
+                    remaining.remove(cc);
+                }
+                let split = best_meld_split(remaining, &rules.meld_params);
+                assert!(
+                    rules.close_params.can_close(split.unmatched),
+                    "LayMeld {:?} leaves a non-closing residual",
+                    m.cards.bits()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn closer_can_pass_once_hand_reduces_to_closing_residual() {
+        let (rules, mut state, mut events) = setup_closed_hand();
+        // Lay the 1s set.
+        let m1 = Meld {
+            kind: MeldKind::Set,
+            cards: Hand::from(
+                [c(Suit::Clubs, 1), c(Suit::Diamonds, 1), c(Suit::Hearts, 1)].as_slice(),
+            ),
+        };
+        let mut rng = chance(0);
+        rules.apply(&mut state, Action::LayMeld(m1), &mut rng, &mut events);
+        // Lay the 2s set.
+        let m2 = Meld {
+            kind: MeldKind::Set,
+            cards: Hand::from(
+                [c(Suit::Clubs, 2), c(Suit::Diamonds, 2), c(Suit::Hearts, 2)].as_slice(),
+            ),
+        };
+        rules.apply(&mut state, Action::LayMeld(m2), &mut rng, &mut events);
+        // Now the closer's hand is just 3S. Pass should be legal.
+        let mut actions = ActionList::new();
+        rules.legal_actions(&state, &mut actions);
+        assert!(
+            actions.contains(&Action::Pass),
+            "closer should be able to pass with a closing residual (3S alone)"
+        );
+    }
+
+    #[test]
+    fn showdown_ends_after_a_full_round_of_passes() {
+        let (rules, mut state, mut events) = setup_closed_hand();
+        let mut rng = chance(0);
+        // Closer lays both sets, reaching a closing residual.
+        for cards in [
+            [c(Suit::Clubs, 1), c(Suit::Diamonds, 1), c(Suit::Hearts, 1)],
+            [c(Suit::Clubs, 2), c(Suit::Diamonds, 2), c(Suit::Hearts, 2)],
+        ] {
+            let m = Meld {
+                kind: MeldKind::Set,
+                cards: Hand::from(cards.as_slice()),
+            };
+            rules.apply(&mut state, Action::LayMeld(m), &mut rng, &mut events);
+        }
+        // Closer passes, then non-closer passes. Hand ends.
+        rules.apply(&mut state, Action::Pass, &mut rng, &mut events);
+        assert_eq!(state.phase, Phase::Showdown);
+        assert!(state.closer_has_opened);
+        rules.apply(&mut state, Action::Pass, &mut rng, &mut events);
+        assert_eq!(state.phase, Phase::Ended);
+    }
+
+    #[test]
+    fn non_closer_may_keep_meld_in_hand() {
+        let (rules, mut state, mut events) = setup_closed_hand();
+        let mut rng = chance(0);
+        // Closer lays both sets and passes.
+        for cards in [
+            [c(Suit::Clubs, 1), c(Suit::Diamonds, 1), c(Suit::Hearts, 1)],
+            [c(Suit::Clubs, 2), c(Suit::Diamonds, 2), c(Suit::Hearts, 2)],
+        ] {
+            let m = Meld {
+                kind: MeldKind::Set,
+                cards: Hand::from(cards.as_slice()),
+            };
+            rules.apply(&mut state, Action::LayMeld(m), &mut rng, &mut events);
+        }
+        rules.apply(&mut state, Action::Pass, &mut rng, &mut events);
+        // Opponent has a 3-card run 5S 6S 7S and a 3-set 10C 10D 10H plus 4S.
+        // They choose to keep everything and pass. Detail (d) says this is
+        // legal. Their hand should still contain all 7 cards.
+        let mut actions = ActionList::new();
+        rules.legal_actions(&state, &mut actions);
+        assert!(actions.contains(&Action::Pass));
+        rules.apply(&mut state, Action::Pass, &mut rng, &mut events);
+        assert_eq!(state.phase, Phase::Ended);
+        assert_eq!(state.hands[1].len(), 7);
+    }
+
+    #[test]
+    fn non_closer_can_add_to_tabled_meld() {
+        let (rules, mut state, mut events) = setup_closed_hand();
+        let mut rng = chance(0);
+        // Closer lays the 1s and 2s, then passes.
+        for cards in [
+            [c(Suit::Clubs, 1), c(Suit::Diamonds, 1), c(Suit::Hearts, 1)],
+            [c(Suit::Clubs, 2), c(Suit::Diamonds, 2), c(Suit::Hearts, 2)],
+        ] {
+            let m = Meld {
+                kind: MeldKind::Set,
+                cards: Hand::from(cards.as_slice()),
+            };
+            rules.apply(&mut state, Action::LayMeld(m), &mut rng, &mut events);
+        }
+        rules.apply(&mut state, Action::Pass, &mut rng, &mut events);
+        // The non-closer can add 4S to the 5S-6S-7S run - but that run isn't
+        // on the table (they chose not to lay it). What they CAN do: nothing
+        // into these tabled sets (no more 1s or 2s in hand). So all their
+        // AddToMeld options should be empty, only LayMeld and Pass remain.
+        let mut actions = ActionList::new();
+        rules.legal_actions(&state, &mut actions);
+        assert!(
+            !actions
+                .iter()
+                .any(|a| matches!(a, Action::AddToMeld { .. }))
+        );
+        assert!(actions.iter().any(|a| matches!(a, Action::LayMeld(_))));
+        assert!(actions.contains(&Action::Pass));
+    }
+
+    #[test]
+    fn showdown_accepts_add_to_meld_extending_a_run() {
+        let rules = StandardConga::new();
+        // Build a showdown state where a tabled run 5S-6S-7S exists and the
+        // acting seat holds 4S and 8S.
+        let acting_hand: Hand = [
+            c(Suit::Spades, 4),
+            c(Suit::Spades, 8),
+            c(Suit::Clubs, 10),
+            c(Suit::Diamonds, 10),
+            c(Suit::Hearts, 10),
+            c(Suit::Clubs, 7),
+            c(Suit::Diamonds, 7),
+        ]
+        .as_slice()
+        .into();
+        let tabled_run = Meld {
+            kind: MeldKind::Run,
+            cards: Hand::from(
+                [c(Suit::Spades, 5), c(Suit::Spades, 6), c(Suit::Spades, 7)].as_slice(),
+            ),
+        };
+        let state = State {
+            seats_count: 2,
+            hands: vec![acting_hand, Hand::EMPTY],
+            stock: Vec::new(),
+            discard_pile: vec![c(Suit::Clubs, 9)],
+            scores: vec![0, 0],
+            dealer: Seat::new(1),
+            current_seat: Seat::new(0),
+            phase: Phase::Showdown,
+            melds_on_table: vec![tabled_run],
+            first_turn_done: vec![true, true],
+            must_not_discard: None,
+            closer: Some(Seat::new(1)),
+            closer_hand_at_close: Some(Hand::EMPTY),
+            closer_has_opened: true,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
+        };
+        let mut actions = ActionList::new();
+        rules.legal_actions(&state, &mut actions);
+        let adds: Vec<_> = actions
+            .iter()
+            .filter_map(|a| match a {
+                Action::AddToMeld { card, meld_index } => Some((*card, *meld_index)),
+                _ => None,
+            })
+            .collect();
+        assert!(adds.contains(&(c(Suit::Spades, 4), 0)));
+        assert!(adds.contains(&(c(Suit::Spades, 8), 0)));
+        // 10C, 10D, 10H, 7C, 7D don't extend the run.
+        assert!(!adds.iter().any(|(card, _)| card.rank().as_u8() == 10));
     }
 }

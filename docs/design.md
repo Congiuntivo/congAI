@@ -102,6 +102,7 @@ Edge-case readings of the rules above that the engine encodes. Each is custom to
 | # | Rule touched | Clarification | Reason |
 | --- | --- | --- | --- |
 | C1 | Rule 6 | `Close(c)` with the card just taken from the top of the discard pile is **legal**. Rule 6 forbids only the face-up re-discard (the "free pass"). A close is a face-down discard that ends the hand, so rule 6's purpose does not apply. See D15 | Keeps a technically-legal move available; removing it would only prune a rarely-useful corner case |
+| C2 | Showdown detail (c) | The closer's `Pass` in their first showdown turn is legal **only** when their remaining hand is itself a closing residual (≤ 2 cards summing ≤ 5). They must physically lay down the melds of some closing split; a 7-card hand whose best split happens to close is not enough. See D16 | "Lay down a split" in detail (c) implies physical placement. The alternative (hand's best split is enough on its own) lets the closer hide their melds, which contradicts the server-check wording and hands the closer a strategic edge the design doc did not contemplate |
 
 ## Architecture
 

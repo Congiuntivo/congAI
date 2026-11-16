@@ -5,7 +5,7 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 1 (core engine), in progress
-- Slice: 5 — StandardConga playing phase. Code and tests done, awaiting Simone's review. Slices 1-4 accepted.
+- Slice: 6 — showdown phase. Code and tests done, awaiting Simone's review. Slices 1-5 accepted.
 - Branch: `m1-core-engine`
 - Last accepted tag: `setup-accepted`
 

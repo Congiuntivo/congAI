@@ -19,6 +19,7 @@ Every decision taken after or outside `docs/design.md`, oldest first. Add a row 
 | D13 | 2026-11-16 | Showdown detail f: hands are hidden during the showdown. Only cards on the table are public until the count | Simone confirmed the proposal |
 | D14 | 2026-11-16 | `RuleSet::sample_state` takes `&mut dyn Rng` not `&mut dyn RngCore`. Design doc updated in the same commit | rand_core 0.10 deprecated `RngCore` in favour of `Rng`; using the deprecated trait fails the clippy `-D warnings` check |
 | D15 | 2026-11-16 | Rule-6 clarification C1: `Close(c)` with the card just taken from the top of the discard pile is legal. Rule 6 applies only to face-up re-discards. Logged as C1 under "Rule clarifications" in `docs/design.md` | Rule 6's stated purpose is to prevent a free pass; closing is not a free pass (it ends the hand) so the ban does not extend to it. Keeps the move available |
+| D16 | 2026-11-16 | Detail-(c) clarification C2: the closer's `Pass` in their first showdown turn is legal only when their hand IS the closing residual (≤ 2 cards summing ≤ 5). Must physically lay down melds. Logged as C2 under "Rule clarifications" in `docs/design.md` | Matches "lay down a split" in detail (c) and the physical game: opponents verify by looking at the table. Permissive reading would let the closer hide their melds and deny opponents meld-add targets |
 
 ## Open
 

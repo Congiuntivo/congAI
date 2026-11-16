@@ -34,4 +34,14 @@ pub struct State {
     /// The closer's hand at the moment of close, before any showdown action.
     /// Used in slice 7 to detect the -10 and -50 bonuses.
     pub closer_hand_at_close: Option<Hand>,
+    /// Flips to true when the closer passes for the first time in the
+    /// showdown. Until then, the closer must lay down a split that reduces
+    /// their hand to a closing residual (detail c).
+    pub closer_has_opened: bool,
+    /// Number of consecutive `Pass` actions since the last placement. When
+    /// this reaches `seats_count`, the showdown ends.
+    pub showdown_consecutive_passes: u8,
+    /// The face-down card placed by `Close(c)`. Kept so every card remains
+    /// accounted for in the state; not exposed in observations.
+    pub face_down_close: Option<Card>,
 }
