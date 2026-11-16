@@ -5,7 +5,7 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 1 (core engine), in progress
-- Slice: 4 — RuleSet trait, Chance trait, MatchStatus, conformance skeleton. Code done, awaiting Simone's review. Slices 1-3 accepted.
+- Slice: 5 — StandardConga playing phase. Code and tests done, awaiting Simone's review. Slices 1-4 accepted.
 - Branch: `m1-core-engine`
 - Last accepted tag: `setup-accepted`
 

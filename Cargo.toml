@@ -14,3 +14,4 @@ publish = false
 
 [workspace.dependencies]
 rand_core = "0.10"
+rand_chacha = "0.10"

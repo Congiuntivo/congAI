@@ -22,5 +22,6 @@ pub use meld::{
 };
 pub use observation::Observation;
 pub use phase::Phase;
+pub use rand_core::Rng;
 pub use ruleset::{ActionList, MatchStatus, RuleSet, RuleSetId};
 pub use seat::Seat;
