@@ -99,7 +99,29 @@ Six details are still open, and each has a proposal.
 
 One authoritative game server sits between every client and a pure rules engine. Local, LAN, online and AI play then differ only in which clients connect and over which transport.
 
-&#91;embedded content: architecture · 8 components\]
+```
+          +--------------------+
+          | Clients (TUI, GUI) |
+          +---------+----------+
+                    |
+              Protocol messages
+                    |
+          +---------v----------+
+          |     Transport      |   in-memory, later WebSocket
+          +---------+----------+
+                    |
+          +---------v----------+        +-----------+
+          |    Game server     +------->| Event log |
+          | validates, logs    |        +-----+-----+
+          +---------+----------+              |
+                    |                         | reads logs
+              rule queries                    |
+                    |                   +-----v-----+
+          +---------v----------+        | AI library|
+          |    Core engine     +<-------+ simulates |
+          | state, rules       |        +-----------+
+          +--------------------+
+```
 
 Read it top down: clients send actions and receive observations, the server validates and logs, the engine holds the rules. The AI library reads logged games and simulates with the same engine.
 
@@ -141,6 +163,8 @@ class Player:
 class Analyst:
     def analyse(self, observation) -> list[ActionReport]: ...   # value and reasons per legal action
 ```
+
+The engine itself uses the Rust `RuleSet` trait defined in the Pluggable rule sets section below, which supersedes this Python sketch.
 
 ### Action space
 
