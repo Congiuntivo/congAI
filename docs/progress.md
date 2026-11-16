@@ -5,7 +5,7 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 1 (core engine), in progress
-- Slice: 7 — scoring, bonuses, elimination. Code and tests done, awaiting Simone's review. Slices 1-6 accepted.
+- Slice: 8 — event log, Chance impls, replay. Code and tests done, awaiting Simone's review. Slices 1-7 accepted.
 - Branch: `m1-core-engine`
 - Last accepted tag: `setup-accepted`
 

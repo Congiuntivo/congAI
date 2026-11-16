@@ -606,26 +606,12 @@ impl RuleSet for StandardConga {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conga_core::{DrawSource, Rank, Suit};
+    use conga_core::{DrawSource, GameLog, RandomChance, Rank, Suit, replay};
     use rand_chacha::ChaCha8Rng;
     use rand_core::SeedableRng;
 
-    struct RandomChance(ChaCha8Rng);
-
-    impl Chance for RandomChance {
-        fn shuffle(&mut self, deck: &mut Vec<Card>) {
-            // Fisher-Yates using the Rng trait. The small bias from
-            // `next_u32() % (i+1)` is negligible on a 40-card deck and the
-            // shuffle is logged, so replay stays exact.
-            for i in (1..deck.len()).rev() {
-                let j = (self.0.next_u32() as usize) % (i + 1);
-                deck.swap(i, j);
-            }
-        }
-    }
-
-    fn chance(seed: u64) -> RandomChance {
-        RandomChance(ChaCha8Rng::seed_from_u64(seed))
+    fn chance(seed: u64) -> RandomChance<ChaCha8Rng> {
+        RandomChance::new(ChaCha8Rng::seed_from_u64(seed))
     }
 
     fn c(suit: Suit, rank: u8) -> Card {
@@ -985,6 +971,88 @@ mod tests {
                         None => break,
                     };
                     rules.apply(&mut state, chosen, &mut chance_rng, &mut events);
+                }
+            }
+        }
+    }
+
+    // --- replay ---
+
+    /// Play one random hand with `RandomChance`, log the shuffles and
+    /// actions, then replay. Return the live states, the replayed states
+    /// and the log so callers can compare.
+    fn play_and_log(
+        rules: &StandardConga,
+        seats: u8,
+        seed: u64,
+        max_turns: u32,
+    ) -> (Vec<State>, GameLog) {
+        let mut chance = self::chance(seed);
+        let mut policy_rng = ChaCha8Rng::seed_from_u64(seed ^ 0xDEADBEEFDEADBEEF);
+        let starting_scores = vec![0i32; seats as usize];
+        let dealer = Seat::new(0);
+        let mut state = rules.new_hand(&starting_scores, dealer, &mut chance);
+        let mut live_states = vec![state.clone()];
+        let mut recorded_actions: Vec<Action> = Vec::new();
+        let mut events: Vec<Event> = Vec::new();
+        let mut actions = ActionList::new();
+        for _turn in 0..max_turns {
+            if state.phase == Phase::Ended {
+                break;
+            }
+            rules.legal_actions(&state, &mut actions);
+            let chosen = match pick_random(&actions, &mut policy_rng) {
+                Some(a) => a,
+                None => break,
+            };
+            recorded_actions.push(chosen.clone());
+            rules.apply(&mut state, chosen, &mut chance, &mut events);
+            live_states.push(state.clone());
+        }
+        let log = GameLog {
+            ruleset_id: rules.id(),
+            seats,
+            dealer,
+            starting_scores,
+            actions: recorded_actions,
+            shuffles: chance.into_shuffles(),
+        };
+        (live_states, log)
+    }
+
+    #[test]
+    fn logged_hand_replays_to_identical_states() {
+        let rules = StandardConga::new();
+        // Hand-written sanity: one seed, step through and confirm every
+        // intermediate state matches.
+        let (live, log) = play_and_log(&rules, 2, 123, 300);
+        let replayed = replay(&rules, &log);
+        assert_eq!(live.len(), replayed.states.len());
+        for (i, (a, b)) in live.iter().zip(replayed.states.iter()).enumerate() {
+            assert_eq!(a, b, "state divergence at step {i}");
+        }
+    }
+
+    #[test]
+    fn replay_matches_live_over_many_games() {
+        // The milestone exit condition: play N random games, log each, and
+        // assert that the replayed state trajectory is byte-identical. This
+        // activates conformance invariant 4.
+        let rules = StandardConga::new();
+        for &seats in &[2u8, 3, 4] {
+            for seed in 0..100u64 {
+                let (live, log) = play_and_log(&rules, seats, seed, 500);
+                let replayed = replay(&rules, &log);
+                assert_eq!(
+                    live.len(),
+                    replayed.states.len(),
+                    "trajectory length differs for seats={seats} seed={seed}"
+                );
+                for (i, (a, b)) in live.iter().zip(replayed.states.iter()).enumerate() {
+                    assert_eq!(
+                        a, b,
+                        "state divergence at step {i} for seats={seats} seed={seed}"
+                    );
                 }
             }
         }
