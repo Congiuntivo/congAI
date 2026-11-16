@@ -20,7 +20,7 @@ The project is finished when it has produced three things:
 
 ## Ruleset
 
-All 21 rules are now confirmed. Six details of the showdown after a close still need your answer.
+All 21 rules and the six showdown details are now confirmed.
 
 ### Fixed rules
 
@@ -76,9 +76,9 @@ The showdown is written here as four steps taken from your description. Correct 
 3. Turns continue around the table until a full round passes with no card placed.
 4. Each player scores the value of the cards still in hand. Cards on the table cost nothing.
 
-Six details are still open, and each has a proposal.
+Simone confirmed these details on 16 November 2026.
 
-| # | Detail | Proposal |
+| # | Detail | Rule |
 | --- | --- | --- |
 | a | Can the closer add cards to other players' melds in later rounds | Yes |
 | b | Does a closer who empties their hand that way score minus 10 | No. Minus 10 needs 0 unmatched cards at the moment of closing |
