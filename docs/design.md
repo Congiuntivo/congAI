@@ -217,7 +217,7 @@ pub trait RuleSet: Clone + Send + Sync + 'static {
     /// Best split, unmatched total and whether the hand can close. Used by agents.
     fn evaluate_hand(&self, hand: Hand) -> HandEval;
     /// A full state consistent with what one seat knows. Used by the search.
-    fn sample_state(&self, obs: &Observation, rng: &mut dyn RngCore) -> Self::State;
+    fn sample_state(&self, obs: &Observation, rng: &mut dyn Rng) -> Self::State;
 }
 ```
 

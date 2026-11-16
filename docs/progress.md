@@ -5,7 +5,7 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 1 (core engine), in progress
-- Slice: 3 — Action, Event, Observation, Phase, HandResult types. Code and tests done, awaiting Simone's review. Slices 1 and 2 accepted.
+- Slice: 4 — RuleSet trait, Chance trait, MatchStatus, conformance skeleton. Code done, awaiting Simone's review. Slices 1-3 accepted.
 - Branch: `m1-core-engine`
 - Last accepted tag: `setup-accepted`
 
