@@ -18,6 +18,7 @@ Every decision taken after or outside `docs/design.md`, oldest first. Add a row 
 | D12 | 2026-11-16 | Showdown detail e: the minus 10 and minus 50 bonuses belong to the closer only | Simone confirmed the proposal |
 | D13 | 2026-11-16 | Showdown detail f: hands are hidden during the showdown. Only cards on the table are public until the count | Simone confirmed the proposal |
 | D14 | 2026-11-16 | `RuleSet::sample_state` takes `&mut dyn Rng` not `&mut dyn RngCore`. Design doc updated in the same commit | rand_core 0.10 deprecated `RngCore` in favour of `Rng`; using the deprecated trait fails the clippy `-D warnings` check |
+| D15 | 2026-11-16 | Rule-6 clarification C1: `Close(c)` with the card just taken from the top of the discard pile is legal. Rule 6 applies only to face-up re-discards. Logged as C1 under "Rule clarifications" in `docs/design.md` | Rule 6's stated purpose is to prevent a free pass; closing is not a free pass (it ends the hand) so the ban does not extend to it. Keeps the move available |
 
 ## Open
 

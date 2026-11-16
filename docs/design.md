@@ -95,6 +95,14 @@ Simone confirmed these details on 16 November 2026.
 - The split a player lays down matters, because every meld on the table gives the next players places to add cards.
 - The engine needs a third phase and more action indices. The architecture section has the new count.
 
+### Rule clarifications
+
+Edge-case readings of the rules above that the engine encodes. Each is custom to this variant and is listed so later readers can see what the engine actually does when the printed rule is ambiguous. Each clarification links to the decision in `docs/decisions.md`.
+
+| # | Rule touched | Clarification | Reason |
+| --- | --- | --- | --- |
+| C1 | Rule 6 | `Close(c)` with the card just taken from the top of the discard pile is **legal**. Rule 6 forbids only the face-up re-discard (the "free pass"). A close is a face-down discard that ends the hand, so rule 6's purpose does not apply. See D15 | Keeps a technically-legal move available; removing it would only prune a rarely-useful corner case |
+
 ## Architecture
 
 One authoritative game server sits between every client and a pure rules engine. Local, LAN, online and AI play then differ only in which clients connect and over which transport.
