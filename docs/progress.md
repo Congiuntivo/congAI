@@ -5,7 +5,7 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 1 (core engine), in progress
-- Slice: 1 — cards, hands and seats in `conga-core`. Code and tests done, awaiting Simone's review.
+- Slice: 2 — meld solver in `conga-core`. Code and tests done, awaiting Simone's review. Slice 1 accepted.
 - Branch: `m1-core-engine`
 - Last accepted tag: `setup-accepted`
 
