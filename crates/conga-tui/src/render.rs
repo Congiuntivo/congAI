@@ -1,0 +1,353 @@
+//! Pure rendering. `draw(frame, state)` composes the screen; the
+//! per-widget helpers below are unit-testable without a terminal.
+
+use conga_core::{
+    Action, Card, CloseParams, DrawSource, Event, HandEval, MeldParams, Observation, Suit,
+    best_meld_split, evaluate_hand, standard_40,
+};
+use ratatui::Frame;
+use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+
+use crate::app::AppState;
+
+/// Returns one `Line` grouping the acting seat's hand by the meld
+/// solver's best split: meld cards first inside brackets, then `|` and
+/// the unmatched cards followed by their point value in parens. Red for
+/// hearts and diamonds, default for clubs and spades.
+pub fn render_hand(obs: &Observation) -> Line<'static> {
+    let eval = evaluate_hand(
+        obs.own_hand,
+        &MeldParams::standard(),
+        &CloseParams::standard(),
+        standard_40(),
+    );
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    for (i, meld) in eval.splits.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw(" "));
+        }
+        spans.push(Span::raw("["));
+        let cards: Vec<Card> = meld.cards.iter().collect();
+        for (j, card) in cards.iter().enumerate() {
+            if j > 0 {
+                spans.push(Span::raw(" "));
+            }
+            spans.push(card_span(*card));
+        }
+        spans.push(Span::raw("]"));
+    }
+    if !eval.unmatched.is_empty() {
+        if !eval.splits.is_empty() {
+            spans.push(Span::raw(" | "));
+        }
+        let unmatched: Vec<Card> = eval.unmatched.iter().collect();
+        for (j, card) in unmatched.iter().enumerate() {
+            if j > 0 {
+                spans.push(Span::raw(" "));
+            }
+            spans.push(card_span(*card));
+        }
+        spans.push(Span::raw(format!("({})", eval.unmatched_total)));
+    }
+    if eval.can_close {
+        spans.push(Span::styled(
+            "  CLOSE OK",
+            Style::default().add_modifier(Modifier::BOLD),
+        ));
+    }
+    Line::from(spans)
+}
+
+/// One colored span for a card.
+fn card_span(card: Card) -> Span<'static> {
+    let text = card.to_string();
+    let style = match card.suit() {
+        Suit::Hearts | Suit::Diamonds => Style::default().fg(Color::Red),
+        Suit::Clubs | Suit::Spades => Style::default(),
+    };
+    Span::styled(text, style)
+}
+
+/// Human text for one action. Used in the numbered menu.
+pub fn action_label(action: &Action) -> String {
+    match action {
+        Action::DrawStock => "Draw from stock".into(),
+        Action::DrawDiscard => "Take the top discard".into(),
+        Action::Discard(c) => format!("Discard {c}"),
+        Action::Close(c) => format!("Close with {c}"),
+        Action::LayMeld(m) => {
+            let cards: Vec<Card> = m.cards.iter().collect();
+            let joined = cards
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("Lay meld [{joined}]")
+        }
+        Action::AddToMeld { card, meld_index } => {
+            format!("Add {card} to meld #{meld_index}")
+        }
+        Action::Pass => "Pass".into(),
+    }
+}
+
+/// One Line per legal action, numbered 1..=10 (0 means 10).
+pub fn render_legal_lines(legal: &[Action]) -> Vec<Line<'static>> {
+    legal
+        .iter()
+        .enumerate()
+        .take(10)
+        .map(|(i, a)| {
+            let key = if i == 9 {
+                "0".to_string()
+            } else {
+                (i + 1).to_string()
+            };
+            Line::from(vec![
+                Span::styled(format!(" {key}) "), Style::default().fg(Color::Yellow)),
+                Span::raw(action_label(a)),
+            ])
+        })
+        .collect()
+}
+
+fn event_label(event: &Event) -> String {
+    match event {
+        Event::Shuffled(_) => "shuffled the stock".into(),
+        Event::Dealt { seat, hand_size } => {
+            format!("seat {} dealt {} cards", seat.index(), hand_size)
+        }
+        Event::Drew { seat, source } => {
+            let s = match source {
+                DrawSource::Stock => "stock",
+                DrawSource::TopDiscard => "discard",
+            };
+            format!("seat {} drew from {}", seat.index(), s)
+        }
+        Event::Discarded { seat, card } => {
+            format!("seat {} discarded {}", seat.index(), card)
+        }
+        Event::Closed { seat, card } => {
+            format!("seat {} CLOSED with {}", seat.index(), card)
+        }
+        Event::LaidMeld { seat, meld } => {
+            let cards: Vec<Card> = meld.cards.iter().collect();
+            let joined = cards
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("seat {} laid [{joined}]", seat.index())
+        }
+        Event::AddedToMeld {
+            seat,
+            card,
+            meld_index,
+        } => format!(
+            "seat {} added {} to meld #{}",
+            seat.index(),
+            card,
+            meld_index
+        ),
+        Event::Passed { seat } => format!("seat {} passed", seat.index()),
+        Event::HandEnded(result) => format!("hand ended: {:?}", result.points),
+    }
+}
+
+pub fn render_events(events: &[Event]) -> Vec<Line<'static>> {
+    events
+        .iter()
+        .map(|e| Line::from(Span::raw(event_label(e))))
+        .collect()
+}
+
+pub fn render_header(state: &AppState) -> Vec<Line<'static>> {
+    let obs = match state.observation.as_ref() {
+        Some(o) => o,
+        None => {
+            return vec![Line::from(Span::raw(
+                "waiting for the first observation...".to_string(),
+            ))];
+        }
+    };
+    let phase = format!("{:?}", obs.phase);
+    let scores: Vec<String> = obs
+        .scores
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let marker = if (i as u8) == state.own_seat {
+                "you"
+            } else {
+                "AI"
+            };
+            format!("seat {i} ({marker}): {s}")
+        })
+        .collect();
+    vec![
+        Line::from(Span::raw(format!(
+            "Hand {}  Phase: {phase}  Current seat: {}",
+            state.hand_index,
+            obs.current_seat.index()
+        ))),
+        Line::from(Span::raw(format!("Scores: {}", scores.join("  |  ")))),
+    ]
+}
+
+pub fn render_table(obs: &Observation) -> Vec<Line<'static>> {
+    let top = obs
+        .top_discard
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let melds_line = if obs.melds_on_table.is_empty() {
+        "Melds on table: (none)".to_string()
+    } else {
+        let parts: Vec<String> = obs
+            .melds_on_table
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let cards: Vec<Card> = m.cards.iter().collect();
+                let joined = cards
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!("#{i} [{joined}]")
+            })
+            .collect();
+        format!("Melds on table: {}", parts.join("  "))
+    };
+    vec![
+        Line::from(Span::raw(format!(
+            "Top discard: {top}    Stock: {}",
+            obs.stock_size
+        ))),
+        Line::from(Span::raw(melds_line)),
+    ]
+}
+
+/// Full-frame draw. Called from `terminal.draw(|f| draw(f, &state))`.
+pub fn draw(frame: &mut Frame, state: &AppState) {
+    let area = frame.area();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4),
+            Constraint::Length(3),
+            Constraint::Length(4),
+            Constraint::Min(5),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    // Header.
+    frame.render_widget(
+        Paragraph::new(render_header(state))
+            .block(Block::default().borders(Borders::ALL).title(" conga ")),
+        chunks[0],
+    );
+
+    // Your hand.
+    let hand_lines = state
+        .observation
+        .as_ref()
+        .map(render_hand)
+        .map(|l| vec![l])
+        .unwrap_or_else(|| vec![Line::from(Span::raw("(no observation yet)".to_string()))]);
+    frame.render_widget(
+        Paragraph::new(hand_lines)
+            .block(Block::default().borders(Borders::ALL).title(" your hand ")),
+        chunks[1],
+    );
+
+    // Table.
+    let table_lines = state
+        .observation
+        .as_ref()
+        .map(render_table)
+        .unwrap_or_else(|| vec![Line::from(Span::raw(""))]);
+    frame.render_widget(
+        Paragraph::new(table_lines)
+            .block(Block::default().borders(Borders::ALL).title(" table "))
+            .wrap(Wrap { trim: true }),
+        chunks[2],
+    );
+
+    // Actions + events in a vertical split.
+    let middle = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(chunks[3]);
+    let menu_title = if state.is_my_turn() {
+        " legal actions (your turn) "
+    } else if state.observation.is_some() {
+        " legal actions (waiting for other seat) "
+    } else {
+        " legal actions "
+    };
+    frame.render_widget(
+        Paragraph::new(render_legal_lines(&state.legal))
+            .block(Block::default().borders(Borders::ALL).title(menu_title)),
+        middle[0],
+    );
+    frame.render_widget(
+        Paragraph::new(render_events(&state.recent_events))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" recent events "),
+            )
+            .wrap(Wrap { trim: true }),
+        middle[1],
+    );
+
+    // Status line.
+    frame.render_widget(
+        Paragraph::new(state.status_line.clone())
+            .block(Block::default().borders(Borders::ALL).title(" status ")),
+        chunks[4],
+    );
+}
+
+/// Convenience: a bare `HandEval` for tests that want to assert on the
+/// solver output alongside render output.
+pub fn hand_eval(obs: &Observation) -> HandEval {
+    evaluate_hand(
+        obs.own_hand,
+        &MeldParams::standard(),
+        &CloseParams::standard(),
+        standard_40(),
+    )
+}
+
+/// Short best-split summary used by replay in slice 7; kept here so
+/// both the live TUI and the replay CLI render hands the same way.
+pub fn hand_summary_string(obs: &Observation) -> String {
+    let split = best_meld_split(obs.own_hand, &MeldParams::standard());
+    let mut parts: Vec<String> = Vec::new();
+    for meld in &split.splits {
+        let cards: Vec<Card> = meld.cards.iter().collect();
+        parts.push(format!(
+            "[{}]",
+            cards
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+    }
+    if !split.unmatched.is_empty() {
+        let cards: Vec<Card> = split.unmatched.iter().collect();
+        let joined = cards
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        parts.push(format!("| {joined}({})", split.unmatched_total));
+    }
+    parts.join(" ")
+}

@@ -5,7 +5,7 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 2 (game server, protocol, in-memory transport, TUI)
-- Slice: 5 (`conga-ai`: Player trait + RandomPlayer + run_player driver) — done, awaiting review
+- Slice: 6 (`conga-tui`: terminal client with `ratatui` 0.30 + `crossterm`) — done, awaiting review
 - Branch: `m2-server-tui`
 - Last accepted tag: `m1-accepted`
 - Plan: `docs/plans/m2.md` (approved 2026-11-17)
@@ -26,4 +26,4 @@ None.
 
 ## Next
 
-- Milestone 2 slice 6: new `conga-tui` crate using `ratatui` 0.30 + `crossterm`, with the one-screen own-seat view and keyboard-driven action selection. Details in `docs/plans/m2.md`.
+- Milestone 2 slice 7: wire `conga-cli` with `play` and `replay` subcommands — the m2 exit test. Details in `docs/plans/m2.md`.
