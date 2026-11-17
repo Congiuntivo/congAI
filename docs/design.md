@@ -95,6 +95,16 @@ Simone confirmed these details on 16 November 2026.
 - The split a player lays down matters, because every meld on the table gives the next players places to add cards.
 - The engine needs a third phase and more action indices. The architecture section has the new count.
 
+### Rule clarifications
+
+Edge-case readings of the rules above that the engine encodes. Each is custom to this variant and is listed so later readers can see what the engine actually does when the printed rule is ambiguous. Each clarification links to the decision in `docs/decisions.md`.
+
+| # | Rule touched | Clarification | Reason |
+| --- | --- | --- | --- |
+| C1 | Rule 6 | `Close(c)` with the card just taken from the top of the discard pile is **legal**. Rule 6 forbids only the face-up re-discard (the "free pass"). A close is a face-down discard that ends the hand, so rule 6's purpose does not apply. See D15 | Keeps a technically-legal move available; removing it would only prune a rarely-useful corner case |
+| C2 | Showdown detail (c) | The closer's `Pass` in their first showdown turn is legal **only** when their remaining hand is itself a closing residual (≤ 2 cards summing ≤ 5). They must physically lay down the melds of some closing split; a 7-card hand whose best split happens to close is not enough. See D16 | "Lay down a split" in detail (c) implies physical placement. The alternative (hand's best split is enough on its own) lets the closer hide their melds, which contradicts the server-check wording and hands the closer a strategic edge the design doc did not contemplate |
+| C3 | Rules 4 and 16 | **The starter (seat after the dealer) is dealt one extra card.** The discard pile begins empty. The starter's first action is a `Discard`, not a `Draw` + `Discard`. Subsequent turns and all other seats follow the standard draw-then-discard structure in rule 4. The first-turn close ban in rule 5 still applies. See D17 | How Simone's table plays it. Equivalent to "deal 7 to each, turn the top card as the discard, starter draws it" in terms of hand sizes, but keeps the extra card private (no face-up card shown at the start of the hand) |
+
 ## Architecture
 
 One authoritative game server sits between every client and a pure rules engine. Local, LAN, online and AI play then differ only in which clients connect and over which transport.
@@ -217,7 +227,7 @@ pub trait RuleSet: Clone + Send + Sync + 'static {
     /// Best split, unmatched total and whether the hand can close. Used by agents.
     fn evaluate_hand(&self, hand: Hand) -> HandEval;
     /// A full state consistent with what one seat knows. Used by the search.
-    fn sample_state(&self, obs: &Observation, rng: &mut dyn RngCore) -> Self::State;
+    fn sample_state(&self, obs: &Observation, rng: &mut dyn Rng) -> Self::State;
 }
 ```
 

@@ -8,3 +8,7 @@ publish.workspace = true
 
 [dependencies]
 conga-core = { path = "../conga-core" }
+
+[dev-dependencies]
+rand_core = { workspace = true }
+rand_chacha = { workspace = true }
