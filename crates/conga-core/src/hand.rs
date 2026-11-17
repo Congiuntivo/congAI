@@ -96,6 +96,26 @@ impl FromIterator<Card> for Hand {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for Hand {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        let mut seq = serializer.serialize_seq(Some(self.len() as usize))?;
+        for card in self.iter() {
+            seq.serialize_element(&card)?;
+        }
+        seq.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Hand {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Hand, D::Error> {
+        let cards: Vec<Card> = Vec::<Card>::deserialize(deserializer)?;
+        Ok(Hand::from(cards.as_slice()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

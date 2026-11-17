@@ -6,5 +6,13 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
+
 [dependencies]
 rand_core = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

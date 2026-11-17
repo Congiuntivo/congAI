@@ -13,6 +13,7 @@ use crate::ruleset::{RuleSet, RuleSetId};
 use crate::seat::Seat;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GameLog {
     pub ruleset_id: RuleSetId,
     pub seats: u8,

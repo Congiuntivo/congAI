@@ -16,12 +16,14 @@ use crate::deck::DeckSpec;
 use crate::hand::Hand;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum MeldKind {
     Set,
     Run,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Meld {
     pub kind: MeldKind,
     pub cards: Hand,
