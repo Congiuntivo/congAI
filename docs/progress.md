@@ -4,16 +4,16 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone: 1 (core engine), in progress
-- Slice: 9 — debug CLI. Slices 1-8 accepted. Playthrough caught a starter-deal rule (C3/D17); fix committed on the m1 branch. Awaiting Simone's second playthrough.
-- Branch: `m1-core-engine`
-- Last accepted tag: `setup-accepted`
+- Milestone: none active, awaiting milestone 2 start
+- Slice: none
+- Branch: `main`
+- Last accepted tag: `m1-accepted`
 
 ## Done
 
-- Session 0: repository setup. Three commits on `main`: initial contents and .gitignore, cargo workspace scaffold with `conga-core`, `conga-rules`, `conga-cli` each with one smoke test, and the two export-leftover fixes in `docs/design.md` plus this progress update. All three CLAUDE.md checks pass (fmt, clippy, 3 tests). Tagged `setup-accepted` on commit 21f9b43.
-- Milestone 0 is complete: the six showdown details a to f are now confirmed (decisions D8 to D13).
-- Milestone 1 plan saved to `docs/plans/m1.md` and branch `m1-core-engine` created from `main`.
+- Session 0: repository setup, tagged `setup-accepted` on commit 21f9b43.
+- Milestone 0: the six showdown details a to f confirmed (decisions D8 to D13).
+- Milestone 1: core engine. Merged into `main` on 2026-11-17 and tagged `m1-accepted`. Branch `m1-core-engine` kept for history. 11 slice commits plus one post-playthrough fix (C3): plan + cards/hands/seats + meld solver + action/event/observation types + RuleSet/Chance/conformance + StandardConga playing phase + showdown + scoring with −10 and −50 bonuses + event log and exact replay + debug CLI, then the starter-dealt-8 clarification caught during the playthrough. 84 tests pass (fmt, clippy -D warnings, 300-game replay invariant). Rule clarifications C1, C2, C3 encoded in the engine and logged in `docs/design.md`; decisions D14, D15, D16, D17 logged in `docs/decisions.md`.
 
 ## Open questions for Simone
 
@@ -21,8 +21,8 @@ None.
 
 ## Deviations from the design doc
 
-None.
+- D14: `RuleSet::sample_state` signature uses `&mut dyn Rng` (rand_core 0.10 deprecated `RngCore`). Design doc updated in the same commit.
 
 ## Next
 
-- Milestone 1: write the plan, get Simone's approval, then start slice 1 on branch `m1-core-engine`.
+- Milestone 2: game server, protocol, in-memory transport, TUI. Exit test: play a full match against the random agent and replay it from its log. The `docs/prompts/02-milestone-2.md` prompt does not exist yet; worth writing it in the next session before starting plan mode.
