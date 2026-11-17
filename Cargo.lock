@@ -265,10 +265,16 @@ name = "conga-cli"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "conga-ai",
  "conga-core",
+ "conga-protocol",
  "conga-rules",
+ "conga-server",
+ "conga-tui",
  "rand_chacha",
  "rand_core 0.10.1",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
