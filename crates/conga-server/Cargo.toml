@@ -9,7 +9,12 @@ publish.workspace = true
 [dependencies]
 conga-core = { path = "../conga-core" }
 conga-protocol = { path = "../conga-protocol" }
+rand_chacha = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+conga-rules = { path = "../conga-rules" }
 tokio = { workspace = true, features = ["test-util"] }
