@@ -12,10 +12,12 @@
 //! C1: Rule 6 applies only to face-up discard. `Close(c)` with the card just
 //! taken from the discard pile is legal.
 //!
-//! C2 (new in this slice): detail (c) is read strictly - the closer's Pass
-//! is legal only when their remaining hand is itself a closing residual
-//! (<= 2 cards, sum <= 5). They must physically lay down the melds of some
-//! closing split; a hand whose best split closes "in theory" is not enough.
+//! C2: Detail (c) is read strictly - the closer's Pass is legal only when
+//! their remaining hand is itself a closing residual (<= 2 cards, sum <= 5).
+//!
+//! C3: The starter (seat after the dealer) is dealt one extra card. The
+//! discard pile begins empty and the starter's first action is a Discard,
+//! not a Draw. The first-turn close ban still applies.
 
 use std::ops::RangeInclusive;
 
@@ -287,24 +289,26 @@ impl RuleSet for StandardConga {
             }
         }
 
-        // Start the discard pile with one card.
-        let mut discard_pile = Vec::new();
-        if let Some(top) = deck.pop() {
-            discard_pile.push(top);
+        // The starter is dealt one extra card. Instead of turning the top
+        // of the stock face-up as the discard, the starter's first action
+        // is a Discard (no draw). The discard pile begins empty and only
+        // fills once the starter discards. See rule clarification C3 in
+        // docs/design.md.
+        if let Some(extra) = deck.pop() {
+            hands[first_to_act.index() as usize].insert(extra);
         }
 
-        // The remaining cards are the stock.
         let stock = deck;
 
         State {
             seats_count,
             hands,
             stock,
-            discard_pile,
+            discard_pile: Vec::new(),
             scores: scores.to_vec(),
             dealer,
             current_seat: first_to_act,
-            phase: Phase::Draw,
+            phase: Phase::Discard,
             melds_on_table: Vec::new(),
             first_turn_done: vec![false; seats_count as usize],
             must_not_discard: None,
@@ -627,13 +631,14 @@ mod tests {
         let state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
         assert_eq!(state.seats_count, 2);
         assert_eq!(state.hands.len(), 2);
-        for h in &state.hands {
-            assert_eq!(h.len(), 7);
-        }
-        assert_eq!(state.stock.len(), 40 - 2 * 7 - 1);
-        assert_eq!(state.discard_pile.len(), 1);
+        // Starter (seat 1) gets 8 cards per clarification C3; the other
+        // seat gets 7. The discard pile begins empty.
+        assert_eq!(state.hands[1].len(), 8);
+        assert_eq!(state.hands[0].len(), 7);
+        assert_eq!(state.stock.len(), 40 - 7 - 8);
+        assert_eq!(state.discard_pile.len(), 0);
         assert_eq!(state.current_seat, Seat::new(1));
-        assert_eq!(state.phase, Phase::Draw);
+        assert_eq!(state.phase, Phase::Discard);
         assert!(state.first_turn_done.iter().all(|&b| !b));
         assert_eq!(state.must_not_discard, None);
         assert_eq!(state.closer, None);
@@ -648,12 +653,15 @@ mod tests {
             let state = rules.new_hand(&scores, Seat::new(0), &mut rng);
             assert_eq!(state.seats_count, seats);
             assert_eq!(state.hands.len(), seats as usize);
-            for h in &state.hands {
-                assert_eq!(h.len(), 7);
+            for (s, hand) in state.hands.iter().enumerate() {
+                let expected = if s == 1 { 8 } else { 7 };
+                assert_eq!(hand.len() as usize, expected);
             }
-            assert_eq!(state.stock.len(), 40 - 7 * seats as usize - 1);
-            assert_eq!(state.discard_pile.len(), 1);
+            let total_dealt = 7 * seats as usize + 1;
+            assert_eq!(state.stock.len(), 40 - total_dealt);
+            assert_eq!(state.discard_pile.len(), 0);
             assert_eq!(state.current_seat, Seat::new(1));
+            assert_eq!(state.phase, Phase::Discard);
         }
     }
 
@@ -683,10 +691,42 @@ mod tests {
     // --- legal_actions ---
 
     #[test]
-    fn draw_phase_offers_stock_and_discard() {
+    fn starter_starts_in_discard_phase_with_8_cards() {
         let rules = StandardConga::new();
         let mut rng = chance(0);
         let state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
+        assert_eq!(state.phase, Phase::Discard);
+        let mut actions = ActionList::new();
+        rules.legal_actions(&state, &mut actions);
+        // 8 cards, all can be discarded, and no Close on the first turn.
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|a| matches!(a, Action::Discard(_)))
+                .count(),
+            8
+        );
+        assert!(
+            actions.iter().all(|a| !matches!(a, Action::Close(_))),
+            "starter cannot close on their first turn"
+        );
+    }
+
+    #[test]
+    fn draw_phase_offers_stock_and_discard_after_starter_discards() {
+        let rules = StandardConga::new();
+        let mut rng = chance(0);
+        let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
+        let first_card = state.hands[1].iter().next().unwrap();
+        let mut events = Vec::new();
+        rules.apply(
+            &mut state,
+            Action::Discard(first_card),
+            &mut rng,
+            &mut events,
+        );
+        assert_eq!(state.phase, Phase::Draw);
+        assert_eq!(state.current_seat, Seat::new(0));
         let mut actions = ActionList::new();
         rules.legal_actions(&state, &mut actions);
         assert!(actions.contains(&Action::DrawStock));
@@ -698,8 +738,17 @@ mod tests {
         let rules = StandardConga::new();
         let mut rng = chance(0);
         let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
-        let taken = *state.discard_pile.last().unwrap();
+        // Starter discards one card so the pile is non-empty.
+        let starter_card = state.hands[1].iter().next().unwrap();
         let mut events = Vec::new();
+        rules.apply(
+            &mut state,
+            Action::Discard(starter_card),
+            &mut rng,
+            &mut events,
+        );
+        // Seat 0 is now in Draw phase. Take from the pile.
+        let taken = *state.discard_pile.last().unwrap();
         rules.apply(&mut state, Action::DrawDiscard, &mut rng, &mut events);
         assert_eq!(state.phase, Phase::Discard);
         assert_eq!(state.must_not_discard, Some(taken));
@@ -803,11 +852,21 @@ mod tests {
         let rules = StandardConga::new();
         let mut rng = chance(3);
         let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
-        let pre_hand_size = state.hands[1].len();
-        let pre_stock = state.stock.len();
+        // Move past the starter's forced discard to reach a Draw phase.
+        let starter_card = state.hands[1].iter().next().unwrap();
         let mut events = Vec::new();
+        rules.apply(
+            &mut state,
+            Action::Discard(starter_card),
+            &mut rng,
+            &mut events,
+        );
+        assert_eq!(state.phase, Phase::Draw);
+        assert_eq!(state.current_seat, Seat::new(0));
+        let pre_hand_size = state.hands[0].len();
+        let pre_stock = state.stock.len();
         rules.apply(&mut state, Action::DrawStock, &mut rng, &mut events);
-        assert_eq!(state.hands[1].len(), pre_hand_size + 1);
+        assert_eq!(state.hands[0].len(), pre_hand_size + 1);
         assert_eq!(state.stock.len(), pre_stock - 1);
         assert_eq!(state.phase, Phase::Discard);
         assert!(matches!(
@@ -824,14 +883,13 @@ mod tests {
         let rules = StandardConga::new();
         let mut rng = chance(5);
         let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
-        let mut events = Vec::new();
-        rules.apply(&mut state, Action::DrawStock, &mut rng, &mut events);
-        // Pick any card in hand.
+        // Starter (seat 1) is already in Discard phase with 8 cards per C3.
         let seat_idx = state.current_seat.index() as usize;
         let to_discard = state.hands[seat_idx].iter().next().unwrap();
         let pre_hand = state.hands[seat_idx].len();
         let pre_pile = state.discard_pile.len();
         let acting = state.current_seat;
+        let mut events = Vec::new();
         rules.apply(
             &mut state,
             Action::Discard(to_discard),
@@ -852,16 +910,27 @@ mod tests {
         let rules = StandardConga::new();
         let mut rng = chance(11);
         let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
-        // Drain the stock by hand and move cards to the discard pile.
-        // Build a state with stock=[] and pile with 10 cards.
+        // Move past the starter's forced discard so the pile is non-empty
+        // and the next seat is in Draw phase.
+        let starter_card = state.hands[1].iter().next().unwrap();
+        let mut events = Vec::new();
+        rules.apply(
+            &mut state,
+            Action::Discard(starter_card),
+            &mut rng,
+            &mut events,
+        );
+        // Now stock has 25 cards, pile has 1, phase = Draw for seat 0.
+        // Synthesise an empty-stock state: move stock cards under the
+        // current pile top.
+        let pile_top = state.discard_pile.pop().unwrap();
         let mut synthetic_pile: Vec<Card> = std::mem::take(&mut state.stock);
-        synthetic_pile.push(state.discard_pile.pop().unwrap());
+        synthetic_pile.push(pile_top);
         state.discard_pile = synthetic_pile;
         assert!(state.stock.is_empty());
         let pile_top_before = *state.discard_pile.last().unwrap();
         let pile_len_before = state.discard_pile.len();
 
-        let mut events = Vec::new();
         rules.apply(&mut state, Action::DrawStock, &mut rng, &mut events);
         // After reshuffle + draw: stock has pile_len_before - 2 cards (minus
         // one for reshuffle-preserved top, minus one for the draw).

@@ -5,7 +5,7 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 1 (core engine), in progress
-- Slice: 9 — debug CLI. Code and tests done, awaiting Simone's review. Slices 1-8 accepted. Milestone 1 feature-complete pending Simone's playthrough.
+- Slice: 9 — debug CLI. Slices 1-8 accepted. Playthrough caught a starter-deal rule (C3/D17); fix committed on the m1 branch. Awaiting Simone's second playthrough.
 - Branch: `m1-core-engine`
 - Last accepted tag: `setup-accepted`
 
