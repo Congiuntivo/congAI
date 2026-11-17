@@ -5,6 +5,7 @@ members = [
     "crates/conga-protocol",
     "crates/conga-rules",
     "crates/conga-server",
+    "crates/conga-ai",
     "crates/conga-cli",
 ]
 
