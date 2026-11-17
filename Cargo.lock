@@ -119,6 +119,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "conga-protocol"
+version = "0.0.0"
+dependencies = [
+ "conga-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "conga-rules"
 version = "0.0.0"
 dependencies = [

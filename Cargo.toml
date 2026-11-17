@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/conga-core",
+    "crates/conga-protocol",
     "crates/conga-rules",
     "crates/conga-cli",
 ]
