@@ -4,10 +4,11 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone: none active, awaiting milestone 2 start
-- Slice: none
-- Branch: `main`
+- Milestone: 2 (game server, protocol, in-memory transport, TUI)
+- Slice: 1 (serde on protocol types in `conga-core`) — not yet started
+- Branch: `m2-server-tui`
 - Last accepted tag: `m1-accepted`
+- Plan: `docs/plans/m2.md` (approved 2026-11-17)
 
 ## Done
 
@@ -25,4 +26,4 @@ None.
 
 ## Next
 
-- Milestone 2: game server, protocol, in-memory transport, TUI. Exit test: play a full match against the random agent and replay it from its log. The `docs/prompts/02-milestone-2.md` prompt does not exist yet; worth writing it in the next session before starting plan mode.
+- Milestone 2 slice 1: add serde derives to the protocol-visible types in `conga-core` behind a feature flag, with round-trip JSON tests. Details in `docs/plans/m2.md`.
