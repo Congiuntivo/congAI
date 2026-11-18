@@ -59,7 +59,7 @@ where
                 let obs = latest_obs
                     .as_ref()
                     .ok_or(DriverError::AwaitWithoutObserve)?;
-                let action = player.act(obs, &legal).await;
+                let action = player.act(obs, &legal);
                 transport
                     .send(ClientToServer::Act {
                         turn: latest_turn,

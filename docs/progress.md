@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 3 (baseline agents + evaluation harness)
-- Slice: 0 (plan saved) — ready to start slice 1
+- Slice: 1 (`Player::act` sync) — done, awaiting review
 - Branch: `m3-baselines-eval`
 - Last accepted tag: `m2-accepted`
 - Plan: `docs/plans/m3.md` (approved 2026-11-18)
-- Decisions D26–D30 logged in `docs/decisions.md` in the plan-save commit.
+- Slice 1 (D26) makes the `Player` trait synchronous: `fn act(&mut self, obs, legal) -> Action`. `RandomPlayer::act` is no longer `async`; `run_player` calls it sync inside the `AwaitAction` branch. The four `RandomPlayer` unit tests dropped `#[tokio::test]` (they never needed async), the one driver test with an inline Spy player also dropped its `async`. 220 tests pass.
 
 ## Done
 
@@ -28,4 +28,4 @@ None.
 
 ## Next
 
-- Milestone 3, slice 1: make `Player::act` synchronous (D26). Touches `conga-ai` only; `RandomPlayer` and the `run_player` driver follow.
+- Milestone 3, slice 2: `GreedyPlayer` per D27 (deterministic draw / discard / close / meld heuristics).

@@ -30,7 +30,7 @@ impl<R: Rng + Send> RandomPlayer<R> {
 }
 
 impl<R: Rng + Send> Player for RandomPlayer<R> {
-    async fn act(&mut self, _obs: &Observation, legal: &[Action]) -> Action {
+    fn act(&mut self, _obs: &Observation, legal: &[Action]) -> Action {
         assert!(
             !legal.is_empty(),
             "RandomPlayer::act called with no legal actions"

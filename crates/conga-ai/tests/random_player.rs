@@ -26,8 +26,8 @@ fn sample_obs() -> Observation {
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn random_player_returns_a_legal_action() {
+#[test]
+fn random_player_returns_a_legal_action() {
     let mut player = RandomPlayer::from_seed(42);
     let legal = vec![
         Action::DrawStock,
@@ -37,7 +37,7 @@ async fn random_player_returns_a_legal_action() {
     ];
     let obs = sample_obs();
     for _ in 0..500 {
-        let chosen = player.act(&obs, &legal).await;
+        let chosen = player.act(&obs, &legal);
         assert!(
             legal.contains(&chosen),
             "RandomPlayer returned a non-legal action: {chosen:?}"
@@ -45,8 +45,8 @@ async fn random_player_returns_a_legal_action() {
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn random_player_distribution_is_close_to_uniform() {
+#[test]
+fn random_player_distribution_is_close_to_uniform() {
     // 10,000 draws over a 4-action list; 3σ around the mean of 2,500
     // is about 1,500..3,500. Comfortably wider than any realistic bias
     // and still tight enough to catch a broken distribution.
@@ -60,7 +60,7 @@ async fn random_player_distribution_is_close_to_uniform() {
     let obs = sample_obs();
     let mut counts = [0u32; 4];
     for _ in 0..10_000 {
-        let chosen = player.act(&obs, &legal).await;
+        let chosen = player.act(&obs, &legal);
         let idx = legal.iter().position(|a| a == &chosen).unwrap();
         counts[idx] += 1;
     }
@@ -72,8 +72,8 @@ async fn random_player_distribution_is_close_to_uniform() {
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn random_player_same_seed_is_deterministic() {
+#[test]
+fn random_player_same_seed_is_deterministic() {
     let obs = sample_obs();
     let legal = vec![
         Action::DrawStock,
@@ -85,16 +85,16 @@ async fn random_player_same_seed_is_deterministic() {
     let mut p1 = RandomPlayer::from_seed(123);
     let mut p2 = RandomPlayer::from_seed(123);
     for _ in 0..100 {
-        assert_eq!(p1.act(&obs, &legal).await, p2.act(&obs, &legal).await);
+        assert_eq!(p1.act(&obs, &legal), p2.act(&obs, &legal));
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[test]
 #[should_panic(expected = "no legal actions")]
-async fn random_player_panics_on_empty_legal() {
+fn random_player_panics_on_empty_legal() {
     let mut player = RandomPlayer::from_seed(1);
     let obs = sample_obs();
-    let _ = player.act(&obs, &[]).await;
+    let _ = player.act(&obs, &[]);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -153,7 +153,7 @@ async fn driver_delivers_events_to_notify() {
     }
 
     impl Player for Spy {
-        async fn act(&mut self, _obs: &Observation, legal: &[Action]) -> Action {
+        fn act(&mut self, _obs: &Observation, legal: &[Action]) -> Action {
             legal[0].clone()
         }
         fn notify(&mut self, event: &conga_core::Event) {
