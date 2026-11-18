@@ -12,6 +12,9 @@ pub mod phase;
 pub mod ruleset;
 pub mod seat;
 
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests;
+
 pub use action::{Action, DrawSource};
 pub use card::{Card, Rank, Suit};
 pub use chance::{Chance, RandomChance, ReplayChance};

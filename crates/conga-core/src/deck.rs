@@ -3,6 +3,7 @@
 use crate::card::Card;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeckSpec {
     pub cards: u8,
 }

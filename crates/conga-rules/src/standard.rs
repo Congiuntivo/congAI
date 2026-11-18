@@ -251,7 +251,7 @@ impl RuleSet for StandardConga {
 
     fn id(&self) -> RuleSetId {
         RuleSetId {
-            name: RULESET_NAME,
+            name: std::borrow::Cow::Borrowed(RULESET_NAME),
             version: RULESET_VERSION,
             // Parameters of StandardConga are currently a known constant; a
             // real hash of the meld and close params moves here if a rule

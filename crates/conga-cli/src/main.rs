@@ -1,8 +1,9 @@
 use std::io::IsTerminal;
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-mod debug_hand;
+use conga_cli::{debug_hand, play, replay};
 
 #[derive(Parser)]
 #[command(name = "conga-cli", about = "Conga engine command-line tools")]
@@ -24,6 +25,28 @@ enum Command {
         #[arg(long, default_value_t = 2)]
         players: u8,
     },
+    /// Play a full match in the TUI against the random agent. Writes a
+    /// JSON-lines log that `replay` can read back.
+    Play {
+        /// RNG seed for the match's shuffles and the AI's choices.
+        #[arg(long)]
+        seed: u64,
+        /// Number of players. m2 only supports 2.
+        #[arg(long, default_value_t = 2)]
+        players: u8,
+        /// Where to write the JSON-lines match log.
+        #[arg(long)]
+        log: PathBuf,
+        /// Suit glyphs: `french` (default) uses ♣♦♥♠, `spanish` uses ✦●♡✚.
+        #[arg(long, default_value = "french", value_parser = ["french", "spanish", "f", "s"])]
+        suits: String,
+    },
+    /// Read a JSON-lines match log and print each hand's state
+    /// sequence plus the final match status.
+    Replay {
+        /// Path to a JSON-lines match log written by `play`.
+        log_file: PathBuf,
+    },
 }
 
 fn main() {
@@ -41,6 +64,41 @@ fn main() {
             if let Err(e) = debug_hand::run(opts, stdin, stdout) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
+            }
+        }
+        Command::Play {
+            seed,
+            players,
+            log,
+            suits,
+        } => {
+            let theme = conga_tui::SuitTheme::parse(&suits).unwrap_or_default();
+            let opts = play::PlayOptions {
+                seed,
+                players,
+                log_path: log,
+                theme,
+            };
+            match play::run(opts) {
+                Ok((status, scores)) => {
+                    // Printed after the TUI has torn down its raw mode.
+                    println!("match end: {status:?}  scores: {scores:?}");
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Command::Replay { log_file } => {
+            let opts = replay::ReplayOptions { log_path: log_file };
+            let stdout = std::io::stdout().lock();
+            match replay::run(opts, stdout) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
             }
         }
     }

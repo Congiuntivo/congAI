@@ -2,7 +2,11 @@
 resolver = "3"
 members = [
     "crates/conga-core",
+    "crates/conga-protocol",
     "crates/conga-rules",
+    "crates/conga-server",
+    "crates/conga-ai",
+    "crates/conga-tui",
     "crates/conga-cli",
 ]
 
@@ -16,3 +20,8 @@ publish = false
 rand_core = "0.10"
 rand_chacha = "0.10"
 clap = { version = "4.6", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "sync", "io-util"] }
+ratatui = "0.30"
+crossterm = "0.29"

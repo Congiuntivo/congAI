@@ -5,6 +5,7 @@
 //! fast path; the trait is deliberately not object-safe (associated `State`
 //! type plus `Clone` supertrait).
 
+use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
 use rand_core::Rng;
@@ -22,14 +23,18 @@ use crate::seat::Seat;
 /// fills, so the allocation can be reused across turns.
 pub type ActionList = Vec<Action>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RuleSetId {
-    pub name: &'static str,
+    /// `Cow` so a rule set can hand out a `&'static str` without allocating,
+    /// yet a deserialized id still owns its name.
+    pub name: Cow<'static, str>,
     pub version: u32,
     pub param_hash: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum MatchStatus {
     /// The match is not over.
     InProgress,

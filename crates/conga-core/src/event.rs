@@ -9,6 +9,7 @@ use crate::meld::Meld;
 use crate::seat::Seat;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Bonus {
     /// Closing with 0 unmatched cards.
     MinusTen,
@@ -17,6 +18,7 @@ pub enum Bonus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct HandResult {
     /// Points scored this hand per seat, in seat order. Includes bonuses.
     pub points: Vec<i32>,
@@ -27,6 +29,7 @@ pub struct HandResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Event {
     /// The result of a shuffle, in the order cards will be dealt / drawn. The
     /// engine logs every shuffle so a replay can reproduce it exactly.

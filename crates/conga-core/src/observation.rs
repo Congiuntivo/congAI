@@ -11,6 +11,7 @@ use crate::phase::Phase;
 use crate::seat::Seat;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Observation {
     /// The seat this observation is for.
     pub own_seat: Seat,

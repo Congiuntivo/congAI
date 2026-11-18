@@ -8,6 +8,7 @@
 use core::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum Suit {
     Clubs = 0,
@@ -40,6 +41,8 @@ impl fmt::Display for Suit {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
 pub struct Rank(u8);
 
 impl Rank {
@@ -103,11 +106,46 @@ impl Card {
     pub fn rank(self) -> Rank {
         Rank(self.0 % Rank::MAX + 1)
     }
+
+    /// Parse the `Display` form of a card: a decimal rank 1..=10 followed by
+    /// one suit letter in `CDHS`. Returns `None` for any other input.
+    pub fn parse(s: &str) -> Option<Card> {
+        if s.len() < 2 || !s.is_ascii() {
+            return None;
+        }
+        let (rank_part, suit_part) = s.split_at(s.len() - 1);
+        let rank_num: u8 = rank_part.parse().ok()?;
+        let rank = Rank::new(rank_num)?;
+        let suit = match suit_part {
+            "C" => Suit::Clubs,
+            "D" => Suit::Diamonds,
+            "H" => Suit::Hearts,
+            "S" => Suit::Spades,
+            _ => return None,
+        };
+        Some(Card::new(suit, rank))
+    }
 }
 
 impl fmt::Display for Card {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.rank(), self.suit())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Card {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Card {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Card, D::Error> {
+        use serde::de::Error;
+        let s = String::deserialize(deserializer)?;
+        Card::parse(&s).ok_or_else(|| D::Error::custom(format!("invalid card: {s:?}")))
     }
 }
 
