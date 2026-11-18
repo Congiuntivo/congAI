@@ -19,15 +19,7 @@ fn enter_activates_the_hovered_tile() {
 }
 
 #[test]
-fn d_c_p_bind_discard_close_pass() {
-    assert_eq!(
-        key_to_intent(&key(KeyCode::Char('d'))),
-        KeyIntent::DiscardSelected
-    );
-    assert_eq!(
-        key_to_intent(&key(KeyCode::Char('D'))),
-        KeyIntent::DiscardSelected
-    );
+fn c_and_p_bind_close_and_pass() {
     assert_eq!(
         key_to_intent(&key(KeyCode::Char('c'))),
         KeyIntent::CloseSelected
@@ -38,6 +30,12 @@ fn d_c_p_bind_discard_close_pass() {
     );
     assert_eq!(key_to_intent(&key(KeyCode::Char('p'))), KeyIntent::Pass);
     assert_eq!(key_to_intent(&key(KeyCode::Char('P'))), KeyIntent::Pass);
+}
+
+#[test]
+fn d_is_no_longer_bound() {
+    assert_eq!(key_to_intent(&key(KeyCode::Char('d'))), KeyIntent::Ignored);
+    assert_eq!(key_to_intent(&key(KeyCode::Char('D'))), KeyIntent::Ignored);
 }
 
 #[test]

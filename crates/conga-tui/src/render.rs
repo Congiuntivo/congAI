@@ -437,8 +437,9 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     );
 }
 
-/// One line listing the key bindings. Greys out bindings that are not
-/// legal in the current cursor / legal-set context.
+/// One line listing the key bindings. The Enter label is contextual
+/// (`draw` on Stock / Discard, `discard` on a hand card) and bindings
+/// that aren't legal right now are greyed out.
 pub fn render_bindings_footer(state: &AppState) -> Line<'static> {
     let legal_active = state.is_my_turn();
     let obs = state.observation.as_ref();
@@ -448,44 +449,39 @@ pub fn render_bindings_footer(state: &AppState) -> Line<'static> {
         _ => None,
     };
 
-    let legal_activate = legal_active
-        && match state.cursor {
-            CursorPos::Stock => state.legal.contains(&Action::DrawStock),
-            CursorPos::Discard => state.legal.contains(&Action::DrawDiscard),
-            CursorPos::Hand(_) => {
-                hand_card.is_some_and(|c| state.legal.contains(&Action::Discard(c)))
-            }
-        };
-    let legal_discard =
-        legal_active && hand_card.is_some_and(|c| state.legal.contains(&Action::Discard(c)));
+    let (enter_label, enter_legal) = match state.cursor {
+        CursorPos::Stock => ("draw", state.legal.contains(&Action::DrawStock)),
+        CursorPos::Discard => ("draw", state.legal.contains(&Action::DrawDiscard)),
+        CursorPos::Hand(_) => (
+            "discard",
+            hand_card.is_some_and(|c| state.legal.contains(&Action::Discard(c))),
+        ),
+    };
     let legal_close =
         legal_active && hand_card.is_some_and(|c| state.legal.contains(&Action::Close(c)));
     let legal_pass = legal_active && state.legal.contains(&Action::Pass);
 
     let spans = vec![
-        binding_span("←→", "move", legal_active),
+        binding_span("←→ move", legal_active),
         Span::raw("  "),
-        binding_span("Enter", "act", legal_activate),
+        binding_span(&format!("Enter {enter_label}"), legal_active && enter_legal),
         Span::raw("  "),
-        binding_span("d", "discard", legal_discard),
+        binding_span("c close", legal_close),
         Span::raw("  "),
-        binding_span("c", "close", legal_close),
+        binding_span("p pass", legal_pass),
         Span::raw("  "),
-        binding_span("p", "pass", legal_pass),
-        Span::raw("  "),
-        binding_span("q", "quit", true),
+        binding_span("q quit", true),
     ];
     Line::from(spans)
 }
 
-fn binding_span(key: &'static str, label: &'static str, legal: bool) -> Span<'static> {
-    let text = format!("{key} {label}");
+fn binding_span(text: &str, legal: bool) -> Span<'static> {
     let style = if legal {
         Style::default().fg(Color::White)
     } else {
         Style::default().fg(Color::DarkGray)
     };
-    Span::styled(text, style)
+    Span::styled(text.to_string(), style)
 }
 
 /// Convenience: a bare `HandEval` for tests that want to assert on the

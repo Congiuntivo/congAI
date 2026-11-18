@@ -12,11 +12,9 @@ use crossterm::event::{KeyCode, KeyEvent};
 pub enum KeyIntent {
     MoveLeft,
     MoveRight,
-    /// Enter: act on the hovered tile (Stock → DrawStock, Discard →
+    /// Enter: commit on the hovered tile (Stock → DrawStock, Discard →
     /// DrawDiscard, Hand(i) → Discard(hand[i])).
     Activate,
-    /// `d`: discard the hovered hand card.
-    DiscardSelected,
     /// `c`: close with the hovered hand card.
     CloseSelected,
     /// `p`: pass (legal in showdown).
@@ -40,7 +38,6 @@ pub fn key_to_intent(key: &KeyEvent) -> KeyIntent {
 fn char_to_intent(c: char) -> KeyIntent {
     match c {
         'q' | 'Q' => KeyIntent::Quit,
-        'd' | 'D' => KeyIntent::DiscardSelected,
         'c' | 'C' => KeyIntent::CloseSelected,
         'p' | 'P' => KeyIntent::Pass,
         _ => KeyIntent::Ignored,

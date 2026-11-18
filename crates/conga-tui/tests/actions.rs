@@ -101,21 +101,6 @@ fn enter_on_stock_rejects_when_not_in_legal() {
 }
 
 #[test]
-fn d_on_stock_asks_the_user_to_move_onto_a_card() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
-    let legal = vec![Action::DrawStock];
-    let r = resolve(
-        KeyIntent::DiscardSelected,
-        CursorPos::Stock,
-        &obs,
-        &legal,
-        SuitTheme::French,
-    );
-    let msg = reject_msg(&r);
-    assert!(msg.contains("hand card"), "unexpected: {msg}");
-}
-
-#[test]
 fn c_on_hand_resolves_to_close_when_legal() {
     let hand = [c(Suit::Clubs, 1), c(Suit::Hearts, 2)];
     let obs = obs_with_hand(&hand);

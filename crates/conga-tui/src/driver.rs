@@ -129,7 +129,7 @@ where
                 state.legal = legal;
                 state.reset_cursor();
                 state.status_line =
-                    "your turn — ← → move, Enter act, d discard, c close, p pass, q quit".into();
+                    "your turn — ← → move, Enter act, c close, p pass, q quit".into();
                 let action = read_action(&mut guard, &mut state).await?;
                 transport
                     .send(ClientToServer::Act {

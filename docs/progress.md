@@ -9,7 +9,7 @@ Claude updates this file at every stop. A new session reads it first.
 - Branch: `m2-server-tui`
 - Last accepted tag: `m1-accepted`
 - Plan: `docs/plans/m2.md` (approved 2026-11-17; TUI redesign slices 8–12 appended 2026-11-18)
-- Slices 1–9 committed. Slice 10 wires the live cursor: `AppState.cursor`, `move_cursor_left/right`, `initial_cursor` picks Stock / Discard / Hand(0) based on legal actions. New `actions.rs` resolver maps `(KeyIntent, CursorPos, legal)` → `Resolved::{Accept, Reject, MoveLeft, MoveRight, Quit, NoOp}`. Input: `←/→` move, `Enter` acts on the hovered tile (Stock → DrawStock, Discard → DrawDiscard, Hand(i) → Discard(hand[i])), `d/c/p` discard / close / pass, `q`/`Esc` quit. The numbered 1..0 menu is gone; a bindings footer replaces it, greying out illegal keys. 197 tests pass.
+- Slices 1–9 committed. Slice 10 wires the live cursor: `AppState.cursor`, `move_cursor_left/right`, `initial_cursor` picks Stock / Discard / Hand(0) based on legal actions. New `actions.rs` resolver maps `(KeyIntent, CursorPos, legal)` → `Resolved::{Accept, Reject, MoveLeft, MoveRight, Quit, NoOp}`. Input: `←/→` move, `Enter` acts on the hovered tile (Stock → DrawStock, Discard → DrawDiscard, Hand(i) → Discard(hand[i])), `c` close with hovered, `p` pass, `q`/`Esc` quit. The numbered 1..0 menu is gone; a bindings footer replaces it, with a contextual Enter label (`draw` on Stock/Discard, `discard` on a hand card) and greyed-out illegal keys. A follow-up commit dropped the redundant `d` key (Enter already covers discard). 197 tests pass.
 
 ## Done
 
