@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 3 (baseline agents + evaluation harness)
-- Slice: 2 (`GreedyPlayer`) — done, awaiting review
+- Slice: 3 (`RuleBasedPlayer`) — done, awaiting review
 - Branch: `m3-baselines-eval`
 - Last accepted tag: `m2-accepted`
 - Plan: `docs/plans/m3.md` (approved 2026-11-18)
-- Slices 1–2 committed. Slice 2 adds `GreedyPlayer` per D27: deterministic, no RNG, no cross-turn state. Close takes priority when legal, then LayMeld, then AddToMeld, then a draw decision (take the top discard only when it lowers unmatched more than its own value), then the highest-rank unmatched card as the discard, Pass as the last resort. Exported from `conga_ai::GreedyPlayer`. 228 tests pass.
+- Slices 1–3 committed. Slice 3 adds `RuleBasedPlayer` per D28: greedy's decisions, but when greedy's discard pick is tied by rank with other legal discards the agent scores each by a safety signal and picks the lowest-risk one. Signals: visible meld extension on the table (+10 per meld it would extend), opponent's recent pickup from discard (+5 same rank, +3 adjacent rank same suit). State kept via `notify()`: `last_discarded` + per-seat pickup lists, cleared on `HandEnded`. Delegates all non-discard decisions to greedy. 233 tests pass.
 
 ## Done
 
@@ -28,4 +28,4 @@ None.
 
 ## Next
 
-- Milestone 3, slice 3: `RuleBasedPlayer` per D28 (greedy + discard-safety v1).
+- Milestone 3, slice 4: headless match runner + paired deals (`conga-ai::eval`).
