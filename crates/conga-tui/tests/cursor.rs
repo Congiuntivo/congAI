@@ -1,7 +1,7 @@
 //! Cursor movement + initial-slot heuristic.
 
-use conga_core::{Action, Card, Hand, Observation, Phase, Rank, Seat, Suit};
-use conga_tui::app::{AppState, CursorPos, initial_cursor};
+use conga_core::{Action, Card, Hand, Meld, MeldKind, Observation, Phase, Rank, Seat, Suit};
+use conga_tui::app::{AppState, CursorPos, Mode, initial_cursor};
 use conga_tui::suits::SuitTheme;
 
 fn c(suit: Suit, rank: u8) -> Card {
@@ -104,4 +104,133 @@ fn move_right_from_discard_stays_on_discard_if_hand_is_empty() {
     s.cursor = CursorPos::Discard;
     s.move_cursor_right();
     assert_eq!(s.cursor, CursorPos::Discard);
+}
+
+fn set_meld(cards: &[Card]) -> Meld {
+    Meld {
+        kind: MeldKind::Set,
+        cards: Hand::from(cards),
+    }
+}
+
+#[test]
+fn enter_lay_meld_mode_filters_to_lay_meld_variants() {
+    let m1 = set_meld(&[c(Suit::Clubs, 7), c(Suit::Diamonds, 7), c(Suit::Hearts, 7)]);
+    let m2 = set_meld(&[c(Suit::Clubs, 3), c(Suit::Diamonds, 3), c(Suit::Hearts, 3)]);
+    let hand = [c(Suit::Clubs, 7)];
+    let mut s = state_with_hand(
+        &hand,
+        vec![
+            Action::DrawStock,
+            Action::LayMeld(m1.clone()),
+            Action::LayMeld(m2.clone()),
+            Action::Pass,
+        ],
+    );
+    assert!(s.enter_lay_meld_mode());
+    match &s.mode {
+        Mode::LayMeldCycle { variants, index } => {
+            assert_eq!(variants.len(), 2);
+            assert_eq!(*index, 0);
+            assert!(matches!(&variants[0], Action::LayMeld(m) if m == &m1));
+            assert!(matches!(&variants[1], Action::LayMeld(m) if m == &m2));
+        }
+        other => panic!("expected LayMeldCycle, got {other:?}"),
+    }
+}
+
+#[test]
+fn enter_lay_meld_mode_fails_when_no_lay_meld_variants() {
+    let hand = [c(Suit::Clubs, 7)];
+    let mut s = state_with_hand(&hand, vec![Action::DrawStock]);
+    assert!(!s.enter_lay_meld_mode());
+    assert!(matches!(s.mode, Mode::Normal));
+}
+
+#[test]
+fn cycle_next_wraps_around() {
+    let m1 = set_meld(&[c(Suit::Clubs, 7), c(Suit::Diamonds, 7), c(Suit::Hearts, 7)]);
+    let m2 = set_meld(&[c(Suit::Clubs, 3), c(Suit::Diamonds, 3), c(Suit::Hearts, 3)]);
+    let hand = [c(Suit::Clubs, 7)];
+    let mut s = state_with_hand(&hand, vec![Action::LayMeld(m1), Action::LayMeld(m2)]);
+    s.enter_lay_meld_mode();
+    s.cycle_next();
+    if let Mode::LayMeldCycle { index, .. } = s.mode {
+        assert_eq!(index, 1);
+    } else {
+        panic!("not in cycle mode");
+    }
+    s.cycle_next();
+    if let Mode::LayMeldCycle { index, .. } = s.mode {
+        assert_eq!(index, 0, "should wrap back to 0");
+    } else {
+        panic!("not in cycle mode");
+    }
+}
+
+#[test]
+fn cycle_prev_wraps_around() {
+    let m1 = set_meld(&[c(Suit::Clubs, 7), c(Suit::Diamonds, 7), c(Suit::Hearts, 7)]);
+    let m2 = set_meld(&[c(Suit::Clubs, 3), c(Suit::Diamonds, 3), c(Suit::Hearts, 3)]);
+    let hand = [c(Suit::Clubs, 7)];
+    let mut s = state_with_hand(&hand, vec![Action::LayMeld(m1), Action::LayMeld(m2)]);
+    s.enter_lay_meld_mode();
+    s.cycle_prev();
+    if let Mode::LayMeldCycle { index, .. } = s.mode {
+        assert_eq!(index, 1, "prev at 0 wraps to last");
+    } else {
+        panic!("not in cycle mode");
+    }
+}
+
+#[test]
+fn current_cycle_cards_lists_the_meld_cards() {
+    let meld_cards = vec![c(Suit::Clubs, 7), c(Suit::Diamonds, 7), c(Suit::Hearts, 7)];
+    let m = set_meld(&meld_cards);
+    let hand = [c(Suit::Clubs, 7)];
+    let mut s = state_with_hand(&hand, vec![Action::LayMeld(m)]);
+    s.enter_lay_meld_mode();
+    let cards = s.current_cycle_cards();
+    assert_eq!(cards, meld_cards);
+}
+
+#[test]
+fn enter_add_meld_mode_filters_to_add_variants() {
+    let card = c(Suit::Hearts, 10);
+    let hand = [card];
+    let mut s = state_with_hand(
+        &hand,
+        vec![
+            Action::DrawStock,
+            Action::AddToMeld {
+                card,
+                meld_index: 0,
+            },
+            Action::AddToMeld {
+                card,
+                meld_index: 1,
+            },
+        ],
+    );
+    assert!(s.enter_add_meld_mode());
+    if let Mode::AddToMeldCycle { variants, .. } = &s.mode {
+        assert_eq!(variants.len(), 2);
+    } else {
+        panic!("expected AddToMeldCycle");
+    }
+    // current_cycle_cards for AddToMeld is just the single card.
+    let cards = s.current_cycle_cards();
+    assert_eq!(cards, vec![card]);
+}
+
+#[test]
+fn exit_mode_returns_to_normal() {
+    let m = set_meld(&[c(Suit::Clubs, 7), c(Suit::Diamonds, 7), c(Suit::Hearts, 7)]);
+    let hand = [c(Suit::Clubs, 7)];
+    let mut s = state_with_hand(&hand, vec![Action::LayMeld(m)]);
+    s.enter_lay_meld_mode();
+    assert!(s.is_in_cycle_mode());
+    s.exit_mode();
+    assert!(!s.is_in_cycle_mode());
+    assert!(matches!(s.mode, Mode::Normal));
 }

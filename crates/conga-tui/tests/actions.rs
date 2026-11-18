@@ -2,7 +2,7 @@
 
 use conga_core::{Action, Card, Hand, Observation, Phase, Rank, Seat, Suit};
 use conga_tui::KeyIntent;
-use conga_tui::actions::{Resolved, resolve};
+use conga_tui::actions::{CycleResolved, Resolved, resolve, resolve_cycle};
 use conga_tui::app::CursorPos;
 use conga_tui::suits::SuitTheme;
 
@@ -178,4 +178,57 @@ fn ignored_intent_is_noop() {
         SuitTheme::French,
     );
     assert!(matches!(n, Resolved::NoOp));
+}
+
+#[test]
+fn m_resolves_to_enter_lay_meld() {
+    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let legal = vec![Action::DrawStock];
+    let r = resolve(
+        KeyIntent::MeldMode,
+        CursorPos::Stock,
+        &obs,
+        &legal,
+        SuitTheme::French,
+    );
+    assert!(matches!(r, Resolved::EnterLayMeld));
+}
+
+#[test]
+fn a_resolves_to_enter_add_meld() {
+    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let legal = vec![Action::DrawStock];
+    let r = resolve(
+        KeyIntent::AddMode,
+        CursorPos::Stock,
+        &obs,
+        &legal,
+        SuitTheme::French,
+    );
+    assert!(matches!(r, Resolved::EnterAddMeld));
+}
+
+#[test]
+fn cancel_intent_resolves_to_cancel() {
+    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let legal = vec![Action::DrawStock];
+    let r = resolve(
+        KeyIntent::Cancel,
+        CursorPos::Stock,
+        &obs,
+        &legal,
+        SuitTheme::French,
+    );
+    assert!(matches!(r, Resolved::Cancel));
+}
+
+#[test]
+fn cycle_resolver_maps_the_cycle_keys() {
+    assert_eq!(resolve_cycle(KeyIntent::MoveLeft), CycleResolved::Prev);
+    assert_eq!(resolve_cycle(KeyIntent::MoveRight), CycleResolved::Next);
+    assert_eq!(resolve_cycle(KeyIntent::Activate), CycleResolved::Commit);
+    assert_eq!(resolve_cycle(KeyIntent::Cancel), CycleResolved::Cancel);
+    assert_eq!(resolve_cycle(KeyIntent::Quit), CycleResolved::Quit);
+    assert_eq!(resolve_cycle(KeyIntent::MeldMode), CycleResolved::Ignore);
+    assert_eq!(resolve_cycle(KeyIntent::Pass), CycleResolved::Ignore);
 }

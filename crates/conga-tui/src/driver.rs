@@ -18,10 +18,10 @@ use crossterm::{event, execute};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use crate::actions::{Resolved, resolve};
+use crate::actions::{CycleResolved, Resolved, resolve, resolve_cycle};
 use crate::app::AppState;
 use crate::input::key_to_intent;
-use crate::render::draw;
+use crate::render::{cycle_status_line, draw};
 use crate::suits::SuitTheme;
 
 #[derive(Debug)]
@@ -128,8 +128,10 @@ where
             ServerToClient::AwaitAction { legal, .. } => {
                 state.legal = legal;
                 state.reset_cursor();
+                state.exit_mode();
                 state.status_line =
-                    "your turn — ← → move, Enter act, c close, p pass, q quit".into();
+                    "your turn — ← → move, Enter act, c close, m meld, a add, p pass, q quit"
+                        .into();
                 let action = read_action(&mut guard, &mut state).await?;
                 transport
                     .send(ClientToServer::Act {
@@ -169,9 +171,8 @@ where
 }
 
 /// Block on key input until the user picks a legal action or quits.
-/// Movement keys move the cursor; binding keys resolve against the
-/// current cursor and legal set, writing a helpful status line on
-/// rejections.
+/// The loop dispatches on `state.mode`: Normal mode uses the cursor
+/// resolver, cycle modes use the meld-cycle resolver.
 async fn read_action(guard: &mut TerminalGuard, state: &mut AppState) -> Result<Action, TuiError> {
     loop {
         guard.terminal().draw(|f| draw(f, state))?;
@@ -181,12 +182,61 @@ async fn read_action(guard: &mut TerminalGuard, state: &mut AppState) -> Result<
             .observation
             .clone()
             .expect("AwaitAction without a prior Observe");
+        if state.is_in_cycle_mode() {
+            match resolve_cycle(intent) {
+                CycleResolved::Prev => {
+                    state.cycle_prev();
+                    if let Some(s) = cycle_status_line(state) {
+                        state.status_line = s;
+                    }
+                }
+                CycleResolved::Next => {
+                    state.cycle_next();
+                    if let Some(s) = cycle_status_line(state) {
+                        state.status_line = s;
+                    }
+                }
+                CycleResolved::Commit => {
+                    if let Some(action) = state.current_cycle_action() {
+                        state.exit_mode();
+                        return Ok(action);
+                    }
+                    state.exit_mode();
+                }
+                CycleResolved::Cancel => {
+                    state.exit_mode();
+                    state.status_line = "cancelled".into();
+                }
+                CycleResolved::Quit => return Err(TuiError::UserQuit),
+                CycleResolved::Ignore => {}
+            }
+            continue;
+        }
         let resolved = resolve(intent, state.cursor, &obs, &state.legal, state.theme);
         match resolved {
             Resolved::Accept(action) => return Ok(action),
             Resolved::Reject(msg) => state.status_line = msg,
             Resolved::MoveLeft => state.move_cursor_left(),
             Resolved::MoveRight => state.move_cursor_right(),
+            Resolved::EnterLayMeld => {
+                if state.enter_lay_meld_mode() {
+                    if let Some(s) = cycle_status_line(state) {
+                        state.status_line = s;
+                    }
+                } else {
+                    state.status_line = "no legal meld to lay right now".into();
+                }
+            }
+            Resolved::EnterAddMeld => {
+                if state.enter_add_meld_mode() {
+                    if let Some(s) = cycle_status_line(state) {
+                        state.status_line = s;
+                    }
+                } else {
+                    state.status_line = "no meld on the table can take a card right now".into();
+                }
+            }
+            Resolved::Cancel => return Err(TuiError::UserQuit),
             Resolved::Quit => return Err(TuiError::UserQuit),
             Resolved::NoOp => {}
         }

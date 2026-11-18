@@ -11,7 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
-use crate::app::{AppState, CursorPos};
+use crate::app::{AppState, CursorPos, Mode};
 use crate::suits::{SuitTheme, suit_color};
 
 /// Human-visible string for a card: rank + the theme's suit glyph.
@@ -319,11 +319,13 @@ pub fn render_discard_tile(
 
 /// Compose stock + discard + hand into 4 side-by-side tile rows, with a
 /// 5th hint line below (stock count and best-meld split). `cursor`
-/// highlights one tile with a double border; `None` means nothing is
-/// selected — slice 10 wires an `AppState` field to drive it.
+/// highlights one tile with a double border; `highlighted_cards`
+/// additionally highlights any hand card in the set (used by cycle
+/// mode to show which cards a meld variant covers).
 pub fn render_hand_strip(
     obs: &Observation,
     cursor: Option<CursorPos>,
+    highlighted_cards: &[Card],
     theme: SuitTheme,
 ) -> Vec<Line<'static>> {
     let stock = render_stock_tile(cursor == Some(CursorPos::Stock));
@@ -333,7 +335,10 @@ pub fn render_hand_strip(
     let hand: Vec<Vec<Line<'static>>> = cards
         .iter()
         .enumerate()
-        .map(|(i, c)| render_card_tile(*c, cursor == Some(CursorPos::Hand(i)), theme))
+        .map(|(i, c)| {
+            let selected = cursor == Some(CursorPos::Hand(i)) || highlighted_cards.contains(c);
+            render_card_tile(*c, selected, theme)
+        })
         .collect();
 
     let mut out = Vec::with_capacity(5);
@@ -383,13 +388,18 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     );
 
     // Your hand: stock + discard + card tiles with the hint line below.
-    // Only highlight the cursor while an AwaitAction is live (legal set
-    // is non-empty).
-    let cursor = state.is_my_turn().then_some(state.cursor);
+    // Cursor is visible only in Normal mode; cycle modes highlight the
+    // cards of the currently-pointed meld variant instead.
+    let (cursor, highlighted) = match state.mode {
+        Mode::Normal => (state.is_my_turn().then_some(state.cursor), Vec::new()),
+        Mode::LayMeldCycle { .. } | Mode::AddToMeldCycle { .. } => {
+            (None, state.current_cycle_cards())
+        }
+    };
     let hand_lines = state
         .observation
         .as_ref()
-        .map(|o| render_hand_strip(o, cursor, state.theme))
+        .map(|o| render_hand_strip(o, cursor, &highlighted, state.theme))
         .unwrap_or_else(|| vec![Line::from(Span::raw("(no observation yet)".to_string()))]);
     frame.render_widget(
         Paragraph::new(hand_lines)
@@ -439,8 +449,16 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
 
 /// One line listing the key bindings. The Enter label is contextual
 /// (`draw` on Stock / Discard, `discard` on a hand card) and bindings
-/// that aren't legal right now are greyed out.
+/// that aren't legal right now are greyed out. In cycle modes the
+/// bindings switch to the cycle verbs.
 pub fn render_bindings_footer(state: &AppState) -> Line<'static> {
+    match state.mode {
+        Mode::Normal => normal_bindings_footer(state),
+        Mode::LayMeldCycle { .. } | Mode::AddToMeldCycle { .. } => cycle_bindings_footer(),
+    }
+}
+
+fn normal_bindings_footer(state: &AppState) -> Line<'static> {
     let legal_active = state.is_my_turn();
     let obs = state.observation.as_ref();
 
@@ -460,6 +478,12 @@ pub fn render_bindings_footer(state: &AppState) -> Line<'static> {
     let legal_close =
         legal_active && hand_card.is_some_and(|c| state.legal.contains(&Action::Close(c)));
     let legal_pass = legal_active && state.legal.contains(&Action::Pass);
+    let legal_meld = legal_active && state.legal.iter().any(|a| matches!(a, Action::LayMeld(_)));
+    let legal_add = legal_active
+        && state
+            .legal
+            .iter()
+            .any(|a| matches!(a, Action::AddToMeld { .. }));
 
     let spans = vec![
         binding_span("←→ move", legal_active),
@@ -468,11 +492,44 @@ pub fn render_bindings_footer(state: &AppState) -> Line<'static> {
         Span::raw("  "),
         binding_span("c close", legal_close),
         Span::raw("  "),
+        binding_span("m meld", legal_meld),
+        Span::raw("  "),
+        binding_span("a add", legal_add),
+        Span::raw("  "),
         binding_span("p pass", legal_pass),
         Span::raw("  "),
         binding_span("q quit", true),
     ];
     Line::from(spans)
+}
+
+fn cycle_bindings_footer() -> Line<'static> {
+    let spans = vec![
+        binding_span("←→ cycle", true),
+        Span::raw("  "),
+        binding_span("Enter commit", true),
+        Span::raw("  "),
+        binding_span("Esc cancel", true),
+        Span::raw("  "),
+        binding_span("q quit", true),
+    ];
+    Line::from(spans)
+}
+
+/// Short human-readable label for the currently-cycled meld. Used in
+/// the status line while a cycle mode is active.
+pub fn cycle_status_line(state: &AppState) -> Option<String> {
+    let (kind, variants_len, index) = match &state.mode {
+        Mode::LayMeldCycle { variants, index } => ("lay meld", variants.len(), *index),
+        Mode::AddToMeldCycle { variants, index } => ("add to meld", variants.len(), *index),
+        Mode::Normal => return None,
+    };
+    let action = state.current_cycle_action()?;
+    Some(format!(
+        "{kind} {}/{variants_len}: {}",
+        index + 1,
+        action_label(&action, state.theme)
+    ))
 }
 
 fn binding_span(text: &str, legal: bool) -> Span<'static> {

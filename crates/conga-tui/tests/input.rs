@@ -39,10 +39,18 @@ fn d_is_no_longer_bound() {
 }
 
 #[test]
-fn q_and_esc_quit() {
+fn q_quits_and_esc_cancels() {
     assert_eq!(key_to_intent(&key(KeyCode::Char('q'))), KeyIntent::Quit);
     assert_eq!(key_to_intent(&key(KeyCode::Char('Q'))), KeyIntent::Quit);
-    assert_eq!(key_to_intent(&key(KeyCode::Esc)), KeyIntent::Quit);
+    assert_eq!(key_to_intent(&key(KeyCode::Esc)), KeyIntent::Cancel);
+}
+
+#[test]
+fn m_and_a_enter_meld_modes() {
+    assert_eq!(key_to_intent(&key(KeyCode::Char('m'))), KeyIntent::MeldMode);
+    assert_eq!(key_to_intent(&key(KeyCode::Char('M'))), KeyIntent::MeldMode);
+    assert_eq!(key_to_intent(&key(KeyCode::Char('a'))), KeyIntent::AddMode);
+    assert_eq!(key_to_intent(&key(KeyCode::Char('A'))), KeyIntent::AddMode);
 }
 
 #[test]
@@ -60,7 +68,7 @@ fn digits_are_no_longer_meaningful() {
 
 #[test]
 fn other_keys_are_ignored() {
-    assert_eq!(key_to_intent(&key(KeyCode::Char('a'))), KeyIntent::Ignored);
+    assert_eq!(key_to_intent(&key(KeyCode::Char('x'))), KeyIntent::Ignored);
     assert_eq!(key_to_intent(&key(KeyCode::Up)), KeyIntent::Ignored);
     assert_eq!(key_to_intent(&key(KeyCode::Down)), KeyIntent::Ignored);
     assert_eq!(key_to_intent(&key(KeyCode::Tab)), KeyIntent::Ignored);

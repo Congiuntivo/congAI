@@ -1,7 +1,7 @@
 //! `AppState`: everything the renderer needs. The driver updates it on
 //! each server message; `render::draw` reads it.
 
-use conga_core::{Action, Event, HandResult, MatchStatus, Observation};
+use conga_core::{Action, Card, Event, HandResult, MatchStatus, Observation};
 
 use crate::suits::SuitTheme;
 
@@ -14,6 +14,16 @@ pub enum CursorPos {
     Stock,
     Discard,
     Hand(usize),
+}
+
+/// Interaction mode. `Normal` is cursor-driven (slice 10). The cycle
+/// modes hold a slice of already-filtered legal actions plus the index
+/// of the one currently under the ← → cycle (slice 11).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Mode {
+    Normal,
+    LayMeldCycle { variants: Vec<Action>, index: usize },
+    AddToMeldCycle { variants: Vec<Action>, index: usize },
 }
 
 /// Choose a reasonable starting cursor for a new `AwaitAction`: Stock if
@@ -48,6 +58,9 @@ pub struct AppState {
     /// Which tile the cursor points at. Reset to `initial_cursor` when
     /// `AwaitAction` arrives.
     pub cursor: CursorPos,
+    /// Interaction mode: `Normal` for cursor-driven play, cycle modes
+    /// for the meld builder.
+    pub mode: Mode,
     /// Most recent HandResult, shown briefly between hands.
     pub last_hand_result: Option<HandResult>,
     pub match_status: Option<MatchStatus>,
@@ -68,6 +81,7 @@ impl AppState {
             observation: None,
             legal: Vec::new(),
             cursor: CursorPos::Stock,
+            mode: Mode::Normal,
             last_hand_result: None,
             match_status: None,
             status_line: "waiting for the first observation...".into(),
@@ -120,6 +134,94 @@ impl AppState {
         self.cursor = initial_cursor(&self.legal, self.hand_size());
     }
 
+    /// Enter `LayMeldCycle` with the current legal `LayMeld` actions, if
+    /// any. Returns `true` on entry, `false` if there is nothing to
+    /// cycle (driver writes a status-line hint in that case).
+    pub fn enter_lay_meld_mode(&mut self) -> bool {
+        let variants: Vec<Action> = self
+            .legal
+            .iter()
+            .filter(|a| matches!(a, Action::LayMeld(_)))
+            .cloned()
+            .collect();
+        if variants.is_empty() {
+            return false;
+        }
+        self.mode = Mode::LayMeldCycle { variants, index: 0 };
+        true
+    }
+
+    /// Enter `AddToMeldCycle` with the current legal `AddToMeld`
+    /// actions. Returns `false` if the player has nothing to add.
+    pub fn enter_add_meld_mode(&mut self) -> bool {
+        let variants: Vec<Action> = self
+            .legal
+            .iter()
+            .filter(|a| matches!(a, Action::AddToMeld { .. }))
+            .cloned()
+            .collect();
+        if variants.is_empty() {
+            return false;
+        }
+        self.mode = Mode::AddToMeldCycle { variants, index: 0 };
+        true
+    }
+
+    /// Advance the cycle index by one with wrap-around.
+    pub fn cycle_next(&mut self) {
+        match &mut self.mode {
+            Mode::LayMeldCycle { variants, index } | Mode::AddToMeldCycle { variants, index } => {
+                if !variants.is_empty() {
+                    *index = (*index + 1) % variants.len();
+                }
+            }
+            Mode::Normal => {}
+        }
+    }
+
+    /// Step the cycle index back by one with wrap-around.
+    pub fn cycle_prev(&mut self) {
+        match &mut self.mode {
+            Mode::LayMeldCycle { variants, index } | Mode::AddToMeldCycle { variants, index } => {
+                if !variants.is_empty() {
+                    *index = (*index + variants.len() - 1) % variants.len();
+                }
+            }
+            Mode::Normal => {}
+        }
+    }
+
+    /// Clone the `Action` at the current cycle index. `None` outside a
+    /// cycle mode.
+    pub fn current_cycle_action(&self) -> Option<Action> {
+        match &self.mode {
+            Mode::LayMeldCycle { variants, index } | Mode::AddToMeldCycle { variants, index } => {
+                variants.get(*index).cloned()
+            }
+            Mode::Normal => None,
+        }
+    }
+
+    /// Cards the current cycle action touches. For LayMeld, every card
+    /// of the meld; for AddToMeld, the single card being added. Empty
+    /// outside cycle modes.
+    pub fn current_cycle_cards(&self) -> Vec<Card> {
+        match self.current_cycle_action() {
+            Some(Action::LayMeld(m)) => m.cards.iter().collect(),
+            Some(Action::AddToMeld { card, .. }) => vec![card],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Leave any cycle mode and return to `Normal`.
+    pub fn exit_mode(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn is_in_cycle_mode(&self) -> bool {
+        !matches!(self.mode, Mode::Normal)
+    }
+
     pub fn push_event(&mut self, event: Event) {
         self.recent_events.push(event);
         if self.recent_events.len() > MAX_EVENTS_SHOWN {
@@ -130,6 +232,7 @@ impl AppState {
 
     pub fn clear_legal(&mut self) {
         self.legal.clear();
+        self.mode = Mode::Normal;
     }
 
     pub fn is_my_turn(&self) -> bool {

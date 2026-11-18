@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 2 (game server, protocol, in-memory transport, TUI)
-- Slice: 10 (TUI redesign — cursor + simple actions) — done, awaiting review
+- Slice: 11 (TUI redesign — meld cycle mode) — done, awaiting review
 - Branch: `m2-server-tui`
 - Last accepted tag: `m1-accepted`
 - Plan: `docs/plans/m2.md` (approved 2026-11-17; TUI redesign slices 8–12 appended 2026-11-18)
-- Slices 1–9 committed. Slice 10 wires the live cursor: `AppState.cursor`, `move_cursor_left/right`, `initial_cursor` picks Stock / Discard / Hand(0) based on legal actions. New `actions.rs` resolver maps `(KeyIntent, CursorPos, legal)` → `Resolved::{Accept, Reject, MoveLeft, MoveRight, Quit, NoOp}`. Input: `←/→` move, `Enter` acts on the hovered tile (Stock → DrawStock, Discard → DrawDiscard, Hand(i) → Discard(hand[i])), `c` close with hovered, `p` pass, `q`/`Esc` quit. The numbered 1..0 menu is gone; a bindings footer replaces it, with a contextual Enter label (`draw` on Stock/Discard, `discard` on a hand card) and greyed-out illegal keys. A follow-up commit dropped the redundant `d` key (Enter already covers discard). 197 tests pass.
+- Slices 1–10 committed. Slice 11 adds meld-cycle mode: `AppState.mode` is `Normal | LayMeldCycle{variants, index} | AddToMeldCycle{variants, index}`. `m` / `a` from Normal enter the respective cycle populated from the already-filtered legal set; `←/→` rotate with wrap; `Enter` commits; `Esc` cancels back to Normal (a new `KeyIntent::Cancel`, distinct from `KeyIntent::Quit` on `q`). The hand strip highlights the current meld's cards; the bindings footer swaps to cycle verbs; the status line shows `lay meld 2/3: Lay meld [7♣ 7♦ 7♥]`. `resolve_cycle(intent) -> CycleResolved` is the pure helper for cycle-mode dispatch. 209 tests pass.
 
 ## Done
 

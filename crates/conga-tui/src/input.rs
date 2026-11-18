@@ -1,10 +1,9 @@
 //! Translate keyboard input to an in-game intent.
 //!
-//! m2 slice 10: the TUI uses a tile cursor instead of a numbered-action
-//! list. Keys split into movement (`←/→`), binding keys for the hovered
-//! tile (`Enter`, `d`, `c`, `p`) and session control (`q`, `Esc`). The
-//! driver translates these intents into actions against the current
-//! `legal` set and the current cursor position.
+//! m2 slice 10: cursor model replaced the numbered action list.
+//! m2 slice 11: `m` / `a` enter meld-cycle modes; `Esc` means "cancel
+//! the current mode" rather than always quit (the driver falls back to
+//! Quit when the mode is already `Normal`).
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -12,13 +11,20 @@ use crossterm::event::{KeyCode, KeyEvent};
 pub enum KeyIntent {
     MoveLeft,
     MoveRight,
-    /// Enter: commit on the hovered tile (Stock → DrawStock, Discard →
-    /// DrawDiscard, Hand(i) → Discard(hand[i])).
+    /// Enter: commit — Normal: act on the hovered tile; Cycle: commit
+    /// the currently-pointed meld variant.
     Activate,
     /// `c`: close with the hovered hand card.
     CloseSelected,
     /// `p`: pass (legal in showdown).
     Pass,
+    /// `m`: enter LayMeld cycle mode.
+    MeldMode,
+    /// `a`: enter AddToMeld cycle mode.
+    AddMode,
+    /// `Esc`: cancel the current mode, or quit if already in Normal.
+    Cancel,
+    /// `q`: quit the TUI unconditionally.
     Quit,
     /// A key with no in-game meaning; the driver ignores it.
     Ignored,
@@ -29,7 +35,7 @@ pub fn key_to_intent(key: &KeyEvent) -> KeyIntent {
         KeyCode::Left => KeyIntent::MoveLeft,
         KeyCode::Right => KeyIntent::MoveRight,
         KeyCode::Enter => KeyIntent::Activate,
-        KeyCode::Esc => KeyIntent::Quit,
+        KeyCode::Esc => KeyIntent::Cancel,
         KeyCode::Char(c) => char_to_intent(c),
         _ => KeyIntent::Ignored,
     }
@@ -40,6 +46,8 @@ fn char_to_intent(c: char) -> KeyIntent {
         'q' | 'Q' => KeyIntent::Quit,
         'c' | 'C' => KeyIntent::CloseSelected,
         'p' | 'P' => KeyIntent::Pass,
+        'm' | 'M' => KeyIntent::MeldMode,
+        'a' | 'A' => KeyIntent::AddMode,
         _ => KeyIntent::Ignored,
     }
 }

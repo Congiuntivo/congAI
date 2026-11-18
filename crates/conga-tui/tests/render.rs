@@ -311,7 +311,7 @@ fn hand_strip_produces_four_tile_rows_plus_hint() {
     // Hand of 7 cards; the strip should have 4 tile rows and one hint.
     let hand: Vec<Card> = (1u8..=7).map(|r| c(Suit::Hearts, r)).collect();
     let obs = obs_with_hand(&hand);
-    let lines = render_hand_strip(&obs, None, SuitTheme::French);
+    let lines = render_hand_strip(&obs, None, &[], SuitTheme::French);
     assert_eq!(lines.len(), 5);
     // Each of the first 4 rows includes stock, discard and seven cards.
     for row in lines.iter().take(4) {
@@ -332,7 +332,7 @@ fn hand_strip_highlights_only_the_cursor_tile() {
     let obs = obs_with_hand(&hand);
     // Cursor on Hand(1): only the second card tile should use double
     // corners; stock, discard and the other two hand tiles use light.
-    let lines = render_hand_strip(&obs, Some(CursorPos::Hand(1)), SuitTheme::French);
+    let lines = render_hand_strip(&obs, Some(CursorPos::Hand(1)), &[], SuitTheme::French);
     let top_row: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
     let count_double = top_row.matches('\u{2554}').count();
     let count_single = top_row.matches('\u{250C}').count();
@@ -345,7 +345,7 @@ fn hand_strip_highlights_only_the_cursor_tile() {
 fn hand_strip_highlights_stock_or_discard() {
     let hand = [c(Suit::Clubs, 1)];
     let obs = obs_with_hand(&hand);
-    let lines = render_hand_strip(&obs, Some(CursorPos::Stock), SuitTheme::French);
+    let lines = render_hand_strip(&obs, Some(CursorPos::Stock), &[], SuitTheme::French);
     let top_row: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
     // First tile corner should be double (stock selected).
     assert!(
@@ -353,7 +353,7 @@ fn hand_strip_highlights_stock_or_discard() {
         "stock not selected: {top_row:?}"
     );
 
-    let lines = render_hand_strip(&obs, Some(CursorPos::Discard), SuitTheme::French);
+    let lines = render_hand_strip(&obs, Some(CursorPos::Discard), &[], SuitTheme::French);
     let top_row: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
     // Stock is single, discard (next tile) is double.
     assert!(top_row.starts_with('\u{250C}'));

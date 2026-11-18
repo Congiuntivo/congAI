@@ -9,18 +9,49 @@ use crate::input::KeyIntent;
 use crate::render::card_label;
 use crate::suits::SuitTheme;
 
-/// Result of resolving a key intent against the current state. `Accept`
-/// commits the action; `Reject` keeps the cursor in place and feeds the
-/// message to the status line; `Movement` means the driver should
-/// update the cursor (left/right) and re-draw without acting.
+/// Result of resolving a key intent against Normal-mode state.
+/// `Accept` commits the action; `Reject` feeds the message to the
+/// status line; `MoveLeft` / `MoveRight` ask the driver to move the
+/// cursor; `EnterLayMeld` / `EnterAddMeld` ask the driver to switch
+/// to the corresponding cycle mode; `Cancel` means `Esc` was hit in
+/// Normal (the driver treats it as a quit at this level). Cycle-mode
+/// keys are resolved by [`resolve_cycle`] instead.
 pub enum Resolved {
     Accept(Action),
     Reject(String),
     MoveLeft,
     MoveRight,
+    EnterLayMeld,
+    EnterAddMeld,
+    Cancel,
     Quit,
-    /// Ignored keys produce no visible effect.
     NoOp,
+}
+
+/// Result of resolving a key intent in cycle mode. `Commit` returns
+/// the Action the driver should send and switch back to Normal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CycleResolved {
+    Prev,
+    Next,
+    Commit,
+    Cancel,
+    Quit,
+    Ignore,
+}
+
+/// Cycle-mode key resolution: movement rotates the index, Enter
+/// commits, Esc cancels, q quits. Everything else is ignored so stray
+/// keystrokes don't eject the user from the mode.
+pub fn resolve_cycle(intent: KeyIntent) -> CycleResolved {
+    match intent {
+        KeyIntent::MoveLeft => CycleResolved::Prev,
+        KeyIntent::MoveRight => CycleResolved::Next,
+        KeyIntent::Activate => CycleResolved::Commit,
+        KeyIntent::Cancel => CycleResolved::Cancel,
+        KeyIntent::Quit => CycleResolved::Quit,
+        _ => CycleResolved::Ignore,
+    }
 }
 
 pub fn resolve(
@@ -33,6 +64,9 @@ pub fn resolve(
     match intent {
         KeyIntent::MoveLeft => Resolved::MoveLeft,
         KeyIntent::MoveRight => Resolved::MoveRight,
+        KeyIntent::MeldMode => Resolved::EnterLayMeld,
+        KeyIntent::AddMode => Resolved::EnterAddMeld,
+        KeyIntent::Cancel => Resolved::Cancel,
         KeyIntent::Quit => Resolved::Quit,
         KeyIntent::Ignored => Resolved::NoOp,
         KeyIntent::Activate => resolve_activate(cursor, obs, legal, theme),
