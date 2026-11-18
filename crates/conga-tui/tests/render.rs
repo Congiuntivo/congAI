@@ -3,7 +3,11 @@
 //! for a fixed observation.
 
 use conga_core::{Action, Card, Hand, Observation, Phase, Rank, Seat, Suit};
-use conga_tui::render::{action_label, hand_summary_string, render_hand, render_legal_lines};
+use conga_tui::app::CursorPos;
+use conga_tui::render::{
+    action_label, hand_summary_string, render_card_tile, render_discard_tile, render_hand,
+    render_hand_strip, render_legal_lines, render_stock_tile,
+};
 use conga_tui::suits::SuitTheme;
 
 fn c(suit: Suit, rank: u8) -> Card {
@@ -190,6 +194,173 @@ fn action_label_switches_glyphs_under_spanish_theme() {
     assert_eq!(
         action_label(&Action::Close(c(Suit::Hearts, 2)), th),
         "Close with 2\u{2661}"
+    );
+}
+
+#[test]
+fn card_tile_shape_is_four_lines_wide_five() {
+    let tile = render_card_tile(c(Suit::Clubs, 10), false, SuitTheme::French);
+    assert_eq!(tile.len(), 4);
+    for line in &tile {
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        let width = text.chars().count();
+        assert_eq!(width, 5, "tile line should be 5 cells wide: {text:?}");
+    }
+    // Rank row shows "10" right-aligned, then a space.
+    let rank_row: String = tile[1].spans.iter().map(|s| s.content.as_ref()).collect();
+    assert!(rank_row.contains("10 "), "rank row: {rank_row:?}");
+    // Suit row shows the glyph centered between pipes.
+    let suit_row: String = tile[2].spans.iter().map(|s| s.content.as_ref()).collect();
+    assert!(suit_row.contains('\u{2663}'), "suit row: {suit_row:?}");
+}
+
+#[test]
+fn card_tile_rank_1_through_9_is_space_padded() {
+    let tile = render_card_tile(c(Suit::Hearts, 3), false, SuitTheme::French);
+    let rank_row: String = tile[1].spans.iter().map(|s| s.content.as_ref()).collect();
+    // Format: "│ 3 │" — pipe, space, rank, space, pipe.
+    assert_eq!(rank_row, "\u{2502} 3 \u{2502}", "rank row: {rank_row:?}");
+}
+
+#[test]
+fn card_tile_selected_uses_double_border() {
+    let tile = render_card_tile(c(Suit::Spades, 7), true, SuitTheme::French);
+    let top: String = tile[0].spans.iter().map(|s| s.content.as_ref()).collect();
+    let bot: String = tile[3].spans.iter().map(|s| s.content.as_ref()).collect();
+    assert_eq!(top, "\u{2554}\u{2550}\u{2550}\u{2550}\u{2557}");
+    assert_eq!(bot, "\u{255A}\u{2550}\u{2550}\u{2550}\u{255D}");
+    // Side walls use ║.
+    let side: String = tile[1].spans.iter().map(|s| s.content.as_ref()).collect();
+    assert!(side.starts_with('\u{2551}') && side.ends_with('\u{2551}'));
+}
+
+#[test]
+fn card_tile_unselected_uses_light_border() {
+    let tile = render_card_tile(c(Suit::Diamonds, 1), false, SuitTheme::French);
+    let top: String = tile[0].spans.iter().map(|s| s.content.as_ref()).collect();
+    assert_eq!(top, "\u{250C}\u{2500}\u{2500}\u{2500}\u{2510}");
+}
+
+#[test]
+fn card_tile_colors_the_suit_glyph_for_red_suits() {
+    let tile = render_card_tile(c(Suit::Hearts, 4), false, SuitTheme::French);
+    // The glyph lives on line 2 as its own span.
+    let glyph_span = tile[2]
+        .spans
+        .iter()
+        .find(|s| s.content.as_ref() == "\u{2665}")
+        .expect("heart glyph span");
+    assert_eq!(glyph_span.style.fg, Some(ratatui::style::Color::Red));
+
+    let tile_black = render_card_tile(c(Suit::Clubs, 4), false, SuitTheme::French);
+    let glyph_span = tile_black[2]
+        .spans
+        .iter()
+        .find(|s| s.content.as_ref() == "\u{2663}")
+        .expect("club glyph span");
+    assert_eq!(glyph_span.style.fg, None);
+}
+
+#[test]
+fn card_tile_uses_spanish_glyph_under_spanish_theme() {
+    let tile = render_card_tile(c(Suit::Spades, 7), false, SuitTheme::Spanish);
+    let glyph_span = tile[2]
+        .spans
+        .iter()
+        .find(|s| s.content.as_ref() == "\u{271A}")
+        .expect("espada glyph span");
+    assert_eq!(glyph_span.style.fg, None);
+}
+
+#[test]
+fn stock_tile_is_pattern_filled() {
+    let tile = render_stock_tile(false);
+    assert_eq!(tile.len(), 4);
+    let body: String = tile[1].spans.iter().map(|s| s.content.as_ref()).collect();
+    // Pipes around three light-shade blocks.
+    assert_eq!(body, "\u{2502}\u{2592}\u{2592}\u{2592}\u{2502}");
+}
+
+#[test]
+fn discard_tile_without_top_renders_empty_frame() {
+    let tile = render_discard_tile(None, false, SuitTheme::French);
+    assert_eq!(tile.len(), 4);
+    let body: String = tile[1].spans.iter().map(|s| s.content.as_ref()).collect();
+    assert_eq!(body, "\u{2502}   \u{2502}");
+}
+
+#[test]
+fn discard_tile_with_top_matches_card_tile() {
+    let want = render_card_tile(c(Suit::Clubs, 5), false, SuitTheme::French);
+    let got = render_discard_tile(Some(c(Suit::Clubs, 5)), false, SuitTheme::French);
+    let w_text: String = want
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .map(|s| s.content.as_ref())
+        .collect();
+    let g_text: String = got
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .map(|s| s.content.as_ref())
+        .collect();
+    assert_eq!(w_text, g_text);
+}
+
+#[test]
+fn hand_strip_produces_four_tile_rows_plus_hint() {
+    // Hand of 7 cards; the strip should have 4 tile rows and one hint.
+    let hand: Vec<Card> = (1u8..=7).map(|r| c(Suit::Hearts, r)).collect();
+    let obs = obs_with_hand(&hand);
+    let lines = render_hand_strip(&obs, None, SuitTheme::French);
+    assert_eq!(lines.len(), 5);
+    // Each of the first 4 rows includes stock, discard and seven cards.
+    for row in lines.iter().take(4) {
+        let text: String = row.spans.iter().map(|s| s.content.as_ref()).collect();
+        // Rough sanity: 5 (stock) + 2 (gap) + 5 (discard) + 3 (gap)
+        //             + 7*5 (hand tiles) + 6 (inter-tile gaps) = 56 cells.
+        let w = text.chars().count();
+        assert_eq!(w, 56, "row width {w}: {text:?}");
+    }
+    // Hint line mentions "stock" count.
+    let hint: String = lines[4].spans.iter().map(|s| s.content.as_ref()).collect();
+    assert!(hint.contains("stock 25 cards"), "hint: {hint:?}");
+}
+
+#[test]
+fn hand_strip_highlights_only_the_cursor_tile() {
+    let hand: Vec<Card> = (1u8..=3).map(|r| c(Suit::Clubs, r)).collect();
+    let obs = obs_with_hand(&hand);
+    // Cursor on Hand(1): only the second card tile should use double
+    // corners; stock, discard and the other two hand tiles use light.
+    let lines = render_hand_strip(&obs, Some(CursorPos::Hand(1)), SuitTheme::French);
+    let top_row: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+    let count_double = top_row.matches('\u{2554}').count();
+    let count_single = top_row.matches('\u{250C}').count();
+    assert_eq!(count_double, 1, "exactly one selected tile: {top_row:?}");
+    // Stock + discard + 2 unselected hand tiles = 4 light-border tiles.
+    assert_eq!(count_single, 4, "unselected light borders: {top_row:?}");
+}
+
+#[test]
+fn hand_strip_highlights_stock_or_discard() {
+    let hand = [c(Suit::Clubs, 1)];
+    let obs = obs_with_hand(&hand);
+    let lines = render_hand_strip(&obs, Some(CursorPos::Stock), SuitTheme::French);
+    let top_row: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+    // First tile corner should be double (stock selected).
+    assert!(
+        top_row.starts_with('\u{2554}'),
+        "stock not selected: {top_row:?}"
+    );
+
+    let lines = render_hand_strip(&obs, Some(CursorPos::Discard), SuitTheme::French);
+    let top_row: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+    // Stock is single, discard (next tile) is double.
+    assert!(top_row.starts_with('\u{250C}'));
+    assert_eq!(
+        top_row.matches('\u{2554}').count(),
+        1,
+        "exactly one double border (the discard): {top_row:?}"
     );
 }
 

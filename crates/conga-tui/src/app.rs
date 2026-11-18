@@ -7,6 +7,16 @@ use crate::suits::SuitTheme;
 
 const MAX_EVENTS_SHOWN: usize = 6;
 
+/// Where the TUI cursor sits. Used by the tile renderer in slice 9 to
+/// highlight one tile with a double border. Slice 10 will add a live
+/// `CursorPos` field to `AppState` and the input layer that moves it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorPos {
+    Stock,
+    Discard,
+    Hand(usize),
+}
+
 pub struct AppState {
     pub own_seat: u8,
     pub seats_count: u8,

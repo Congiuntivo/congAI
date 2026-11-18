@@ -11,7 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
-use crate::app::AppState;
+use crate::app::{AppState, CursorPos};
 use crate::suits::{SuitTheme, suit_color};
 
 /// Human-visible string for a card: rank + the theme's suit glyph.
@@ -213,10 +213,6 @@ pub fn render_header(state: &AppState) -> Vec<Line<'static>> {
 }
 
 pub fn render_table(obs: &Observation, theme: SuitTheme) -> Vec<Line<'static>> {
-    let top = obs
-        .top_discard
-        .map(|c| card_label(c, theme))
-        .unwrap_or_else(|| "-".to_string());
     let melds_line = if obs.melds_on_table.is_empty() {
         "Melds on table: (none)".to_string()
     } else {
@@ -236,13 +232,132 @@ pub fn render_table(obs: &Observation, theme: SuitTheme) -> Vec<Line<'static>> {
             .collect();
         format!("Melds on table: {}", parts.join("  "))
     };
+    vec![Line::from(Span::raw(melds_line))]
+}
+
+const TILE_INNER: usize = 3;
+
+fn tile_chars(selected: bool) -> (char, char, char, char, char, char) {
+    if selected {
+        (
+            '\u{2554}', '\u{2550}', '\u{2557}', '\u{2551}', '\u{255A}', '\u{255D}',
+        )
+    } else {
+        (
+            '\u{250C}', '\u{2500}', '\u{2510}', '\u{2502}', '\u{2514}', '\u{2518}',
+        )
+    }
+}
+
+/// 4 Lines describing one card tile. Width is always `TILE_INNER + 2`
+/// cells (default 5). Selected tiles use a double border.
+pub fn render_card_tile(card: Card, selected: bool, theme: SuitTheme) -> Vec<Line<'static>> {
+    let (tl, h, tr, v, bl, br) = tile_chars(selected);
+    let horiz: String = std::iter::repeat_n(h, TILE_INNER).collect();
+    let top = format!("{tl}{horiz}{tr}");
+    let bot = format!("{bl}{horiz}{br}");
+    let rank_text = format!("{:>2}", card.rank().as_u8());
+    let rank_line = format!("{v}{rank_text} {v}");
+    let glyph = theme.glyph(card.suit()).to_string();
+    let glyph_style = match suit_color(card.suit()) {
+        Some(fg) => Style::default().fg(fg),
+        None => Style::default(),
+    };
     vec![
-        Line::from(Span::raw(format!(
-            "Top discard: {top}    Stock: {}",
-            obs.stock_size
-        ))),
-        Line::from(Span::raw(melds_line)),
+        Line::from(Span::raw(top)),
+        Line::from(Span::raw(rank_line)),
+        Line::from(vec![
+            Span::raw(format!("{v} ")),
+            Span::styled(glyph, glyph_style),
+            Span::raw(format!(" {v}")),
+        ]),
+        Line::from(Span::raw(bot)),
     ]
+}
+
+/// 4 Lines describing the stock pile as a face-down tile.
+pub fn render_stock_tile(selected: bool) -> Vec<Line<'static>> {
+    let (tl, h, tr, v, bl, br) = tile_chars(selected);
+    let horiz: String = std::iter::repeat_n(h, TILE_INNER).collect();
+    let top = format!("{tl}{horiz}{tr}");
+    let bot = format!("{bl}{horiz}{br}");
+    let fill: String = std::iter::repeat_n('\u{2592}', TILE_INNER).collect();
+    let body = format!("{v}{fill}{v}");
+    vec![
+        Line::from(Span::raw(top)),
+        Line::from(Span::raw(body.clone())),
+        Line::from(Span::raw(body)),
+        Line::from(Span::raw(bot)),
+    ]
+}
+
+/// 4 Lines describing the top of the discard pile. Blank frame if the
+/// discard is empty (start of a hand or just after the closer's close).
+pub fn render_discard_tile(
+    top: Option<Card>,
+    selected: bool,
+    theme: SuitTheme,
+) -> Vec<Line<'static>> {
+    match top {
+        Some(card) => render_card_tile(card, selected, theme),
+        None => {
+            let (tl, h, tr, v, bl, br) = tile_chars(selected);
+            let horiz: String = std::iter::repeat_n(h, TILE_INNER).collect();
+            let top_line = format!("{tl}{horiz}{tr}");
+            let bot_line = format!("{bl}{horiz}{br}");
+            let blank: String = std::iter::repeat_n(' ', TILE_INNER).collect();
+            let body = format!("{v}{blank}{v}");
+            vec![
+                Line::from(Span::raw(top_line)),
+                Line::from(Span::raw(body.clone())),
+                Line::from(Span::raw(body)),
+                Line::from(Span::raw(bot_line)),
+            ]
+        }
+    }
+}
+
+/// Compose stock + discard + hand into 4 side-by-side tile rows, with a
+/// 5th hint line below (stock count and best-meld split). `cursor`
+/// highlights one tile with a double border; `None` means nothing is
+/// selected — slice 10 wires an `AppState` field to drive it.
+pub fn render_hand_strip(
+    obs: &Observation,
+    cursor: Option<CursorPos>,
+    theme: SuitTheme,
+) -> Vec<Line<'static>> {
+    let stock = render_stock_tile(cursor == Some(CursorPos::Stock));
+    let discard = render_discard_tile(obs.top_discard, cursor == Some(CursorPos::Discard), theme);
+
+    let cards: Vec<Card> = obs.own_hand.iter().collect();
+    let hand: Vec<Vec<Line<'static>>> = cards
+        .iter()
+        .enumerate()
+        .map(|(i, c)| render_card_tile(*c, cursor == Some(CursorPos::Hand(i)), theme))
+        .collect();
+
+    let mut out = Vec::with_capacity(5);
+    for row in 0..4 {
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        spans.extend(stock[row].spans.iter().cloned());
+        spans.push(Span::raw("  "));
+        spans.extend(discard[row].spans.iter().cloned());
+        spans.push(Span::raw("   "));
+        for (i, tile) in hand.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::raw(" "));
+            }
+            spans.extend(tile[row].spans.iter().cloned());
+        }
+        out.push(Line::from(spans));
+    }
+
+    let summary = hand_summary_string(obs, theme);
+    out.push(Line::from(Span::raw(format!(
+        "stock {} cards   {summary}",
+        obs.stock_size
+    ))));
+    out
 }
 
 /// Full-frame draw. Called from `terminal.draw(|f| draw(f, &state))`.
@@ -252,8 +367,8 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(4),
+            Constraint::Length(7),
             Constraint::Length(3),
-            Constraint::Length(4),
             Constraint::Min(5),
             Constraint::Length(3),
         ])
@@ -266,12 +381,11 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         chunks[0],
     );
 
-    // Your hand.
+    // Your hand: stock + discard + card tiles with the hint line below.
     let hand_lines = state
         .observation
         .as_ref()
-        .map(|o| render_hand(o, state.theme))
-        .map(|l| vec![l])
+        .map(|o| render_hand_strip(o, None, state.theme))
         .unwrap_or_else(|| vec![Line::from(Span::raw("(no observation yet)".to_string()))]);
     frame.render_widget(
         Paragraph::new(hand_lines)
@@ -279,7 +393,7 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         chunks[1],
     );
 
-    // Table.
+    // Table: melds laid by any seat.
     let table_lines = state
         .observation
         .as_ref()
