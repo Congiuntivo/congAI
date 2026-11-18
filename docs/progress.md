@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 3 (baseline agents + evaluation harness)
-- Slice: 1 (`Player::act` sync) — done, awaiting review
+- Slice: 2 (`GreedyPlayer`) — done, awaiting review
 - Branch: `m3-baselines-eval`
 - Last accepted tag: `m2-accepted`
 - Plan: `docs/plans/m3.md` (approved 2026-11-18)
-- Slice 1 (D26) makes the `Player` trait synchronous: `fn act(&mut self, obs, legal) -> Action`. `RandomPlayer::act` is no longer `async`; `run_player` calls it sync inside the `AwaitAction` branch. The four `RandomPlayer` unit tests dropped `#[tokio::test]` (they never needed async), the one driver test with an inline Spy player also dropped its `async`. 220 tests pass.
+- Slices 1–2 committed. Slice 2 adds `GreedyPlayer` per D27: deterministic, no RNG, no cross-turn state. Close takes priority when legal, then LayMeld, then AddToMeld, then a draw decision (take the top discard only when it lowers unmatched more than its own value), then the highest-rank unmatched card as the discard, Pass as the last resort. Exported from `conga_ai::GreedyPlayer`. 228 tests pass.
 
 ## Done
 
@@ -28,4 +28,4 @@ None.
 
 ## Next
 
-- Milestone 3, slice 2: `GreedyPlayer` per D27 (deterministic draw / discard / close / meld heuristics).
+- Milestone 3, slice 3: `RuleBasedPlayer` per D28 (greedy + discard-safety v1).
