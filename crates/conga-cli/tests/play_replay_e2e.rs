@@ -11,6 +11,7 @@ use std::io::Cursor;
 use conga_cli::{play, replay};
 use conga_core::{MatchStatus, Seat};
 use conga_rules::StandardConga;
+use conga_tui::SuitTheme;
 
 fn temp_log_path(suffix: &str) -> std::path::PathBuf {
     let mut p = std::env::temp_dir();
@@ -159,6 +160,7 @@ fn cli_rejects_players_other_than_two() {
         seed: 0,
         players: 3,
         log_path: temp_log_path("badplayers"),
+        theme: SuitTheme::French,
     };
     let err = play::run(opts).expect_err("3 players should fail");
     assert!(matches!(err, play::PlayError::UnsupportedPlayers(3)));

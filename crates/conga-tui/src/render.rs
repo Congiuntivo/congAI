@@ -2,7 +2,7 @@
 //! per-widget helpers below are unit-testable without a terminal.
 
 use conga_core::{
-    Action, Card, CloseParams, DrawSource, Event, HandEval, MeldParams, Observation, Suit,
+    Action, Card, CloseParams, DrawSource, Event, HandEval, MeldParams, Observation,
     best_meld_split, evaluate_hand, standard_40,
 };
 use ratatui::Frame;
@@ -12,12 +12,29 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 use crate::app::AppState;
+use crate::suits::{SuitTheme, suit_color};
+
+/// Human-visible string for a card: rank + the theme's suit glyph.
+/// Example: `"7♣"` (French) or `"7✦"` (Spanish).
+pub fn card_label(card: Card, theme: SuitTheme) -> String {
+    format!("{}{}", card.rank(), theme.glyph(card.suit()))
+}
+
+/// Colored span for a card. Red for hearts / diamonds, default for
+/// clubs / spades — same mapping in both themes.
+fn card_span(card: Card, theme: SuitTheme) -> Span<'static> {
+    let text = card_label(card, theme);
+    let style = match suit_color(card.suit()) {
+        Some(fg) => Style::default().fg(fg),
+        None => Style::default(),
+    };
+    Span::styled(text, style)
+}
 
 /// Returns one `Line` grouping the acting seat's hand by the meld
 /// solver's best split: meld cards first inside brackets, then `|` and
-/// the unmatched cards followed by their point value in parens. Red for
-/// hearts and diamonds, default for clubs and spades.
-pub fn render_hand(obs: &Observation) -> Line<'static> {
+/// the unmatched cards followed by their point value in parens.
+pub fn render_hand(obs: &Observation, theme: SuitTheme) -> Line<'static> {
     let eval = evaluate_hand(
         obs.own_hand,
         &MeldParams::standard(),
@@ -35,7 +52,7 @@ pub fn render_hand(obs: &Observation) -> Line<'static> {
             if j > 0 {
                 spans.push(Span::raw(" "));
             }
-            spans.push(card_span(*card));
+            spans.push(card_span(*card, theme));
         }
         spans.push(Span::raw("]"));
     }
@@ -48,7 +65,7 @@ pub fn render_hand(obs: &Observation) -> Line<'static> {
             if j > 0 {
                 spans.push(Span::raw(" "));
             }
-            spans.push(card_span(*card));
+            spans.push(card_span(*card, theme));
         }
         spans.push(Span::raw(format!("({})", eval.unmatched_total)));
     }
@@ -61,41 +78,31 @@ pub fn render_hand(obs: &Observation) -> Line<'static> {
     Line::from(spans)
 }
 
-/// One colored span for a card.
-fn card_span(card: Card) -> Span<'static> {
-    let text = card.to_string();
-    let style = match card.suit() {
-        Suit::Hearts | Suit::Diamonds => Style::default().fg(Color::Red),
-        Suit::Clubs | Suit::Spades => Style::default(),
-    };
-    Span::styled(text, style)
-}
-
 /// Human text for one action. Used in the numbered menu.
-pub fn action_label(action: &Action) -> String {
+pub fn action_label(action: &Action, theme: SuitTheme) -> String {
     match action {
         Action::DrawStock => "Draw from stock".into(),
         Action::DrawDiscard => "Take the top discard".into(),
-        Action::Discard(c) => format!("Discard {c}"),
-        Action::Close(c) => format!("Close with {c}"),
+        Action::Discard(c) => format!("Discard {}", card_label(*c, theme)),
+        Action::Close(c) => format!("Close with {}", card_label(*c, theme)),
         Action::LayMeld(m) => {
             let cards: Vec<Card> = m.cards.iter().collect();
             let joined = cards
                 .iter()
-                .map(|c| c.to_string())
+                .map(|c| card_label(*c, theme))
                 .collect::<Vec<_>>()
                 .join(" ");
             format!("Lay meld [{joined}]")
         }
         Action::AddToMeld { card, meld_index } => {
-            format!("Add {card} to meld #{meld_index}")
+            format!("Add {} to meld #{meld_index}", card_label(*card, theme))
         }
         Action::Pass => "Pass".into(),
     }
 }
 
 /// One Line per legal action, numbered 1..=10 (0 means 10).
-pub fn render_legal_lines(legal: &[Action]) -> Vec<Line<'static>> {
+pub fn render_legal_lines(legal: &[Action], theme: SuitTheme) -> Vec<Line<'static>> {
     legal
         .iter()
         .enumerate()
@@ -108,13 +115,13 @@ pub fn render_legal_lines(legal: &[Action]) -> Vec<Line<'static>> {
             };
             Line::from(vec![
                 Span::styled(format!(" {key}) "), Style::default().fg(Color::Yellow)),
-                Span::raw(action_label(a)),
+                Span::raw(action_label(a, theme)),
             ])
         })
         .collect()
 }
 
-fn event_label(event: &Event) -> String {
+fn event_label(event: &Event, theme: SuitTheme) -> String {
     match event {
         Event::Shuffled(_) => "shuffled the stock".into(),
         Event::Dealt { seat, hand_size } => {
@@ -128,16 +135,24 @@ fn event_label(event: &Event) -> String {
             format!("seat {} drew from {}", seat.index(), s)
         }
         Event::Discarded { seat, card } => {
-            format!("seat {} discarded {}", seat.index(), card)
+            format!(
+                "seat {} discarded {}",
+                seat.index(),
+                card_label(*card, theme)
+            )
         }
         Event::Closed { seat, card } => {
-            format!("seat {} CLOSED with {}", seat.index(), card)
+            format!(
+                "seat {} CLOSED with {}",
+                seat.index(),
+                card_label(*card, theme)
+            )
         }
         Event::LaidMeld { seat, meld } => {
             let cards: Vec<Card> = meld.cards.iter().collect();
             let joined = cards
                 .iter()
-                .map(|c| c.to_string())
+                .map(|c| card_label(*c, theme))
                 .collect::<Vec<_>>()
                 .join(" ");
             format!("seat {} laid [{joined}]", seat.index())
@@ -149,7 +164,7 @@ fn event_label(event: &Event) -> String {
         } => format!(
             "seat {} added {} to meld #{}",
             seat.index(),
-            card,
+            card_label(*card, theme),
             meld_index
         ),
         Event::Passed { seat } => format!("seat {} passed", seat.index()),
@@ -157,10 +172,10 @@ fn event_label(event: &Event) -> String {
     }
 }
 
-pub fn render_events(events: &[Event]) -> Vec<Line<'static>> {
+pub fn render_events(events: &[Event], theme: SuitTheme) -> Vec<Line<'static>> {
     events
         .iter()
-        .map(|e| Line::from(Span::raw(event_label(e))))
+        .map(|e| Line::from(Span::raw(event_label(e, theme))))
         .collect()
 }
 
@@ -197,10 +212,10 @@ pub fn render_header(state: &AppState) -> Vec<Line<'static>> {
     ]
 }
 
-pub fn render_table(obs: &Observation) -> Vec<Line<'static>> {
+pub fn render_table(obs: &Observation, theme: SuitTheme) -> Vec<Line<'static>> {
     let top = obs
         .top_discard
-        .map(|c| c.to_string())
+        .map(|c| card_label(c, theme))
         .unwrap_or_else(|| "-".to_string());
     let melds_line = if obs.melds_on_table.is_empty() {
         "Melds on table: (none)".to_string()
@@ -213,7 +228,7 @@ pub fn render_table(obs: &Observation) -> Vec<Line<'static>> {
                 let cards: Vec<Card> = m.cards.iter().collect();
                 let joined = cards
                     .iter()
-                    .map(|c| c.to_string())
+                    .map(|c| card_label(*c, theme))
                     .collect::<Vec<_>>()
                     .join(" ");
                 format!("#{i} [{joined}]")
@@ -255,7 +270,7 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     let hand_lines = state
         .observation
         .as_ref()
-        .map(render_hand)
+        .map(|o| render_hand(o, state.theme))
         .map(|l| vec![l])
         .unwrap_or_else(|| vec![Line::from(Span::raw("(no observation yet)".to_string()))]);
     frame.render_widget(
@@ -268,7 +283,7 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     let table_lines = state
         .observation
         .as_ref()
-        .map(render_table)
+        .map(|o| render_table(o, state.theme))
         .unwrap_or_else(|| vec![Line::from(Span::raw(""))]);
     frame.render_widget(
         Paragraph::new(table_lines)
@@ -290,12 +305,12 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         " legal actions "
     };
     frame.render_widget(
-        Paragraph::new(render_legal_lines(&state.legal))
+        Paragraph::new(render_legal_lines(&state.legal, state.theme))
             .block(Block::default().borders(Borders::ALL).title(menu_title)),
         middle[0],
     );
     frame.render_widget(
-        Paragraph::new(render_events(&state.recent_events))
+        Paragraph::new(render_events(&state.recent_events, state.theme))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -326,7 +341,7 @@ pub fn hand_eval(obs: &Observation) -> HandEval {
 
 /// Short best-split summary used by replay in slice 7; kept here so
 /// both the live TUI and the replay CLI render hands the same way.
-pub fn hand_summary_string(obs: &Observation) -> String {
+pub fn hand_summary_string(obs: &Observation, theme: SuitTheme) -> String {
     let split = best_meld_split(obs.own_hand, &MeldParams::standard());
     let mut parts: Vec<String> = Vec::new();
     for meld in &split.splits {
@@ -335,7 +350,7 @@ pub fn hand_summary_string(obs: &Observation) -> String {
             "[{}]",
             cards
                 .iter()
-                .map(|c| c.to_string())
+                .map(|c| card_label(*c, theme))
                 .collect::<Vec<_>>()
                 .join(" ")
         ));
@@ -344,7 +359,7 @@ pub fn hand_summary_string(obs: &Observation) -> String {
         let cards: Vec<Card> = split.unmatched.iter().collect();
         let joined = cards
             .iter()
-            .map(|c| c.to_string())
+            .map(|c| card_label(*c, theme))
             .collect::<Vec<_>>()
             .join(" ");
         parts.push(format!("| {joined}({})", split.unmatched_total));

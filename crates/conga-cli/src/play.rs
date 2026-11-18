@@ -16,7 +16,7 @@ use conga_ai::{RandomPlayer, run_player};
 use conga_core::{MatchStatus, Seat};
 use conga_rules::StandardConga;
 use conga_server::{GameServer, JsonLinesWriter, MatchLogWriter, in_memory_pair};
-use conga_tui::run_tui;
+use conga_tui::{SuitTheme, run_tui};
 
 #[derive(Debug)]
 pub enum PlayError {
@@ -55,6 +55,7 @@ pub struct PlayOptions {
     pub seed: u64,
     pub players: u8,
     pub log_path: std::path::PathBuf,
+    pub theme: SuitTheme,
 }
 
 /// Interactive play: seat 0 is the human via `conga-tui`, seat 1 is a
@@ -94,7 +95,8 @@ pub fn run(opts: PlayOptions) -> Result<(MatchStatus, Vec<i32>), PlayError> {
             Ok::<_, conga_server::ServerError>((status, scores))
         });
 
-        let tui_task = tokio::spawn(async move { run_tui(c0, 0, 2).await });
+        let theme = opts.theme;
+        let tui_task = tokio::spawn(async move { run_tui(c0, 0, 2, theme).await });
 
         // AI seed derived from the match seed so repeated runs with the
         // same --seed reproduce the AI's actions.

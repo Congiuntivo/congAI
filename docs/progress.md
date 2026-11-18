@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 2 (game server, protocol, in-memory transport, TUI)
-- Slice: 7 (`conga-cli`: `play` and `replay` subcommands) — done, awaiting review
+- Slice: 8 (TUI redesign — suit theming) — done, awaiting review
 - Branch: `m2-server-tui`
 - Last accepted tag: `m1-accepted`
-- Plan: `docs/plans/m2.md` (approved 2026-11-17)
-- All seven slices of m2 are committed. The milestone exit test is: play a full match via `conga-cli play --seed <s> --players 2 --log /tmp/match.jsonl` and verify with `conga-cli replay /tmp/match.jsonl`.
+- Plan: `docs/plans/m2.md` (approved 2026-11-17; TUI redesign slices 8–12 appended 2026-11-18)
+- Slices 1–7 are committed. Slice 8 adds `SuitTheme::{French, Spanish}` (default French) with a `--suits=french|spanish` flag on `conga-cli play`; the TUI switches from `"7C"` card labels to `"7♣"`/`"7✦"` (log and `replay` stay on the raw `"7C"` serialisation). Slices 9–12 (card tiles, cursor, meld cycle, manual reorder) still pending.
 
 ## Done
 

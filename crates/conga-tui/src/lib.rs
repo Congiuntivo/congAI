@@ -10,8 +10,10 @@ pub mod app;
 pub mod driver;
 pub mod input;
 pub mod render;
+pub mod suits;
 
 pub use app::AppState;
 pub use driver::{TuiError, run_tui};
 pub use input::{KeyIntent, key_to_intent};
 pub use render::render_hand;
+pub use suits::{SuitTheme, suit_color};

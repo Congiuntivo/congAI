@@ -21,6 +21,7 @@ use ratatui::backend::CrosstermBackend;
 use crate::app::AppState;
 use crate::input::{KeyIntent, key_to_intent};
 use crate::render::draw;
+use crate::suits::SuitTheme;
 
 #[derive(Debug)]
 pub enum TuiError {
@@ -101,12 +102,17 @@ async fn next_key() -> io::Result<crossterm::event::KeyEvent> {
 
 /// Drive the TUI client until the server sends `MatchEnded` or the
 /// user presses `q`.
-pub async fn run_tui<T>(mut transport: T, own_seat: u8, seats_count: u8) -> Result<(), TuiError>
+pub async fn run_tui<T>(
+    mut transport: T,
+    own_seat: u8,
+    seats_count: u8,
+    theme: SuitTheme,
+) -> Result<(), TuiError>
 where
     T: Transport<Outgoing = ClientToServer, Incoming = ServerToClient> + Send,
 {
     let mut guard = TerminalGuard::new()?;
-    let mut state = AppState::new(own_seat, seats_count);
+    let mut state = AppState::new(own_seat, seats_count, theme);
 
     guard.terminal().draw(|f| draw(f, &state))?;
 

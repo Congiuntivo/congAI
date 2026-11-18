@@ -37,6 +37,9 @@ enum Command {
         /// Where to write the JSON-lines match log.
         #[arg(long)]
         log: PathBuf,
+        /// Suit glyphs: `french` (default) uses ♣♦♥♠, `spanish` uses ✦●♡✚.
+        #[arg(long, default_value = "french", value_parser = ["french", "spanish", "f", "s"])]
+        suits: String,
     },
     /// Read a JSON-lines match log and print each hand's state
     /// sequence plus the final match status.
@@ -63,11 +66,18 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Command::Play { seed, players, log } => {
+        Command::Play {
+            seed,
+            players,
+            log,
+            suits,
+        } => {
+            let theme = conga_tui::SuitTheme::parse(&suits).unwrap_or_default();
             let opts = play::PlayOptions {
                 seed,
                 players,
                 log_path: log,
+                theme,
             };
             match play::run(opts) {
                 Ok((status, scores)) => {

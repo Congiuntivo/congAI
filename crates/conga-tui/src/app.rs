@@ -3,11 +3,14 @@
 
 use conga_core::{Action, Event, HandResult, MatchStatus, Observation};
 
+use crate::suits::SuitTheme;
+
 const MAX_EVENTS_SHOWN: usize = 6;
 
 pub struct AppState {
     pub own_seat: u8,
     pub seats_count: u8,
+    pub theme: SuitTheme,
     pub hand_index: u32,
     pub latest_turn: u32,
     /// `None` until the server sends the first `Observe`.
@@ -25,10 +28,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(own_seat: u8, seats_count: u8) -> Self {
+    pub fn new(own_seat: u8, seats_count: u8, theme: SuitTheme) -> Self {
         AppState {
             own_seat,
             seats_count,
+            theme,
             hand_index: 0,
             latest_turn: 0,
             observation: None,
