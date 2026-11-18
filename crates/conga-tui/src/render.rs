@@ -369,7 +369,8 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
             Constraint::Length(4),
             Constraint::Length(7),
             Constraint::Length(3),
-            Constraint::Min(5),
+            Constraint::Min(3),
+            Constraint::Length(3),
             Constraint::Length(3),
         ])
         .split(area);
@@ -382,10 +383,13 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     );
 
     // Your hand: stock + discard + card tiles with the hint line below.
+    // Only highlight the cursor while an AwaitAction is live (legal set
+    // is non-empty).
+    let cursor = state.is_my_turn().then_some(state.cursor);
     let hand_lines = state
         .observation
         .as_ref()
-        .map(|o| render_hand_strip(o, None, state.theme))
+        .map(|o| render_hand_strip(o, cursor, state.theme))
         .unwrap_or_else(|| vec![Line::from(Span::raw("(no observation yet)".to_string()))]);
     frame.render_widget(
         Paragraph::new(hand_lines)
@@ -406,23 +410,7 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         chunks[2],
     );
 
-    // Actions + events in a vertical split.
-    let middle = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-        .split(chunks[3]);
-    let menu_title = if state.is_my_turn() {
-        " legal actions (your turn) "
-    } else if state.observation.is_some() {
-        " legal actions (waiting for other seat) "
-    } else {
-        " legal actions "
-    };
-    frame.render_widget(
-        Paragraph::new(render_legal_lines(&state.legal, state.theme))
-            .block(Block::default().borders(Borders::ALL).title(menu_title)),
-        middle[0],
-    );
+    // Recent events, full width.
     frame.render_widget(
         Paragraph::new(render_events(&state.recent_events, state.theme))
             .block(
@@ -431,15 +419,73 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
                     .title(" recent events "),
             )
             .wrap(Wrap { trim: true }),
-        middle[1],
+        chunks[3],
+    );
+
+    // Bindings footer: greys out illegal keys.
+    frame.render_widget(
+        Paragraph::new(vec![render_bindings_footer(state)])
+            .block(Block::default().borders(Borders::ALL).title(" bindings ")),
+        chunks[4],
     );
 
     // Status line.
     frame.render_widget(
         Paragraph::new(state.status_line.clone())
             .block(Block::default().borders(Borders::ALL).title(" status ")),
-        chunks[4],
+        chunks[5],
     );
+}
+
+/// One line listing the key bindings. Greys out bindings that are not
+/// legal in the current cursor / legal-set context.
+pub fn render_bindings_footer(state: &AppState) -> Line<'static> {
+    let legal_active = state.is_my_turn();
+    let obs = state.observation.as_ref();
+
+    let hand_card = match (state.cursor, obs) {
+        (CursorPos::Hand(i), Some(o)) => o.own_hand.iter().nth(i),
+        _ => None,
+    };
+
+    let legal_activate = legal_active
+        && match state.cursor {
+            CursorPos::Stock => state.legal.contains(&Action::DrawStock),
+            CursorPos::Discard => state.legal.contains(&Action::DrawDiscard),
+            CursorPos::Hand(_) => {
+                hand_card.is_some_and(|c| state.legal.contains(&Action::Discard(c)))
+            }
+        };
+    let legal_discard =
+        legal_active && hand_card.is_some_and(|c| state.legal.contains(&Action::Discard(c)));
+    let legal_close =
+        legal_active && hand_card.is_some_and(|c| state.legal.contains(&Action::Close(c)));
+    let legal_pass = legal_active && state.legal.contains(&Action::Pass);
+
+    let spans = vec![
+        binding_span("←→", "move", legal_active),
+        Span::raw("  "),
+        binding_span("Enter", "act", legal_activate),
+        Span::raw("  "),
+        binding_span("d", "discard", legal_discard),
+        Span::raw("  "),
+        binding_span("c", "close", legal_close),
+        Span::raw("  "),
+        binding_span("p", "pass", legal_pass),
+        Span::raw("  "),
+        binding_span("q", "quit", true),
+    ];
+    Line::from(spans)
+}
+
+fn binding_span(key: &'static str, label: &'static str, legal: bool) -> Span<'static> {
+    let text = format!("{key} {label}");
+    let style = if legal {
+        Style::default().fg(Color::White)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+    Span::styled(text, style)
 }
 
 /// Convenience: a bare `HandEval` for tests that want to assert on the

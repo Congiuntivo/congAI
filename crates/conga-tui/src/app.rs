@@ -7,14 +7,31 @@ use crate::suits::SuitTheme;
 
 const MAX_EVENTS_SHOWN: usize = 6;
 
-/// Where the TUI cursor sits. Used by the tile renderer in slice 9 to
-/// highlight one tile with a double border. Slice 10 will add a live
-/// `CursorPos` field to `AppState` and the input layer that moves it.
+/// Where the TUI cursor sits. The tile renderer highlights it with a
+/// double border; the driver resolves key intents against it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorPos {
     Stock,
     Discard,
     Hand(usize),
+}
+
+/// Choose a reasonable starting cursor for a new `AwaitAction`: Stock if
+/// drawing from stock is legal, Discard if only drawing from the top
+/// discard is legal, else the first hand card. `hand_size` is the
+/// clamping bound for the Hand variant; an empty hand with no draw
+/// options falls back to Stock (unreachable in a well-formed game, but
+/// keeps the function total).
+pub fn initial_cursor(legal: &[Action], hand_size: usize) -> CursorPos {
+    if legal.iter().any(|a| matches!(a, Action::DrawStock)) {
+        CursorPos::Stock
+    } else if legal.iter().any(|a| matches!(a, Action::DrawDiscard)) {
+        CursorPos::Discard
+    } else if hand_size > 0 {
+        CursorPos::Hand(0)
+    } else {
+        CursorPos::Stock
+    }
 }
 
 pub struct AppState {
@@ -28,6 +45,9 @@ pub struct AppState {
     /// `Some` only while an `AwaitAction` is live and the observation
     /// matches the current seat. Empty otherwise.
     pub legal: Vec<Action>,
+    /// Which tile the cursor points at. Reset to `initial_cursor` when
+    /// `AwaitAction` arrives.
+    pub cursor: CursorPos,
     /// Most recent HandResult, shown briefly between hands.
     pub last_hand_result: Option<HandResult>,
     pub match_status: Option<MatchStatus>,
@@ -47,11 +67,57 @@ impl AppState {
             latest_turn: 0,
             observation: None,
             legal: Vec::new(),
+            cursor: CursorPos::Stock,
             last_hand_result: None,
             match_status: None,
             status_line: "waiting for the first observation...".into(),
             recent_events: Vec::new(),
         }
+    }
+
+    fn hand_size(&self) -> usize {
+        self.observation
+            .as_ref()
+            .map(|o| o.own_hand.len() as usize)
+            .unwrap_or(0)
+    }
+
+    /// Move the cursor one tile left. Stops at Stock.
+    pub fn move_cursor_left(&mut self) {
+        self.cursor = match self.cursor {
+            CursorPos::Stock => CursorPos::Stock,
+            CursorPos::Discard => CursorPos::Stock,
+            CursorPos::Hand(0) => CursorPos::Discard,
+            CursorPos::Hand(i) => CursorPos::Hand(i - 1),
+        };
+    }
+
+    /// Move the cursor one tile right. Stops at the last hand card.
+    pub fn move_cursor_right(&mut self) {
+        let hand_size = self.hand_size();
+        self.cursor = match self.cursor {
+            CursorPos::Stock => CursorPos::Discard,
+            CursorPos::Discard => {
+                if hand_size > 0 {
+                    CursorPos::Hand(0)
+                } else {
+                    CursorPos::Discard
+                }
+            }
+            CursorPos::Hand(i) => {
+                if i + 1 < hand_size {
+                    CursorPos::Hand(i + 1)
+                } else {
+                    CursorPos::Hand(i)
+                }
+            }
+        };
+    }
+
+    /// Reset cursor for a fresh `AwaitAction`, picking the first slot
+    /// that has a legal action.
+    pub fn reset_cursor(&mut self) {
+        self.cursor = initial_cursor(&self.legal, self.hand_size());
     }
 
     pub fn push_event(&mut self, event: Event) {

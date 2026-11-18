@@ -18,8 +18,9 @@ use crossterm::{event, execute};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
+use crate::actions::{Resolved, resolve};
 use crate::app::AppState;
-use crate::input::{KeyIntent, key_to_intent};
+use crate::input::key_to_intent;
 use crate::render::draw;
 use crate::suits::SuitTheme;
 
@@ -126,7 +127,9 @@ where
             }
             ServerToClient::AwaitAction { legal, .. } => {
                 state.legal = legal;
-                state.status_line = "your turn - pick an action (1..0=10)   q=quit".into();
+                state.reset_cursor();
+                state.status_line =
+                    "your turn — ← → move, Enter act, d discard, c close, p pass, q quit".into();
                 let action = read_action(&mut guard, &mut state).await?;
                 transport
                     .send(ClientToServer::Act {
@@ -165,23 +168,27 @@ where
     }
 }
 
-/// Block on key input until the user picks a valid action index or
-/// quits. Repaints on every valid-but-out-of-range key so the user
-/// gets feedback.
+/// Block on key input until the user picks a legal action or quits.
+/// Movement keys move the cursor; binding keys resolve against the
+/// current cursor and legal set, writing a helpful status line on
+/// rejections.
 async fn read_action(guard: &mut TerminalGuard, state: &mut AppState) -> Result<Action, TuiError> {
     loop {
         guard.terminal().draw(|f| draw(f, state))?;
         let key = next_key().await?;
-        match key_to_intent(&key) {
-            KeyIntent::Quit => return Err(TuiError::UserQuit),
-            KeyIntent::PickAction(idx) => {
-                if idx < state.legal.len() {
-                    return Ok(state.legal[idx].clone());
-                }
-                state.status_line =
-                    format!("no action #{} - pick 1..{}", idx + 1, state.legal.len());
-            }
-            KeyIntent::Ignored => {}
+        let intent = key_to_intent(&key);
+        let obs = state
+            .observation
+            .clone()
+            .expect("AwaitAction without a prior Observe");
+        let resolved = resolve(intent, state.cursor, &obs, &state.legal, state.theme);
+        match resolved {
+            Resolved::Accept(action) => return Ok(action),
+            Resolved::Reject(msg) => state.status_line = msg,
+            Resolved::MoveLeft => state.move_cursor_left(),
+            Resolved::MoveRight => state.move_cursor_right(),
+            Resolved::Quit => return Err(TuiError::UserQuit),
+            Resolved::NoOp => {}
         }
     }
 }

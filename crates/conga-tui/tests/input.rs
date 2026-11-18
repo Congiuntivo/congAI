@@ -8,24 +8,36 @@ fn key(code: KeyCode) -> KeyEvent {
 }
 
 #[test]
-fn digits_1_to_9_map_to_indices_0_to_8() {
-    for i in 1..=9u8 {
-        let c = char::from(b'0' + i);
-        let got = key_to_intent(&key(KeyCode::Char(c)));
-        assert_eq!(
-            got,
-            KeyIntent::PickAction((i - 1) as usize),
-            "unexpected intent for {c}"
-        );
-    }
+fn arrow_keys_move_the_cursor() {
+    assert_eq!(key_to_intent(&key(KeyCode::Left)), KeyIntent::MoveLeft);
+    assert_eq!(key_to_intent(&key(KeyCode::Right)), KeyIntent::MoveRight);
 }
 
 #[test]
-fn digit_0_maps_to_index_9() {
+fn enter_activates_the_hovered_tile() {
+    assert_eq!(key_to_intent(&key(KeyCode::Enter)), KeyIntent::Activate);
+}
+
+#[test]
+fn d_c_p_bind_discard_close_pass() {
     assert_eq!(
-        key_to_intent(&key(KeyCode::Char('0'))),
-        KeyIntent::PickAction(9)
+        key_to_intent(&key(KeyCode::Char('d'))),
+        KeyIntent::DiscardSelected
     );
+    assert_eq!(
+        key_to_intent(&key(KeyCode::Char('D'))),
+        KeyIntent::DiscardSelected
+    );
+    assert_eq!(
+        key_to_intent(&key(KeyCode::Char('c'))),
+        KeyIntent::CloseSelected
+    );
+    assert_eq!(
+        key_to_intent(&key(KeyCode::Char('C'))),
+        KeyIntent::CloseSelected
+    );
+    assert_eq!(key_to_intent(&key(KeyCode::Char('p'))), KeyIntent::Pass);
+    assert_eq!(key_to_intent(&key(KeyCode::Char('P'))), KeyIntent::Pass);
 }
 
 #[test]
@@ -36,8 +48,22 @@ fn q_and_esc_quit() {
 }
 
 #[test]
+fn digits_are_no_longer_meaningful() {
+    for d in b'0'..=b'9' {
+        let got = key_to_intent(&key(KeyCode::Char(d as char)));
+        assert_eq!(
+            got,
+            KeyIntent::Ignored,
+            "digit {} should be ignored",
+            d as char
+        );
+    }
+}
+
+#[test]
 fn other_keys_are_ignored() {
     assert_eq!(key_to_intent(&key(KeyCode::Char('a'))), KeyIntent::Ignored);
-    assert_eq!(key_to_intent(&key(KeyCode::Enter)), KeyIntent::Ignored);
     assert_eq!(key_to_intent(&key(KeyCode::Up)), KeyIntent::Ignored);
+    assert_eq!(key_to_intent(&key(KeyCode::Down)), KeyIntent::Ignored);
+    assert_eq!(key_to_intent(&key(KeyCode::Tab)), KeyIntent::Ignored);
 }

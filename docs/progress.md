@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 2 (game server, protocol, in-memory transport, TUI)
-- Slice: 9 (TUI redesign — card tile renderer) — done, awaiting review
+- Slice: 10 (TUI redesign — cursor + simple actions) — done, awaiting review
 - Branch: `m2-server-tui`
 - Last accepted tag: `m1-accepted`
 - Plan: `docs/plans/m2.md` (approved 2026-11-17; TUI redesign slices 8–12 appended 2026-11-18)
-- Slices 1–8 committed. Slice 9 adds `render_card_tile` / `render_stock_tile` / `render_discard_tile` / `render_hand_strip` (4-row ASCII box tiles with double-border selection). The `draw()` your-hand block uses the strip instead of the one-line summary; stock and top-discard moved from the table block into the strip as tiles. `CursorPos::{Stock, Discard, Hand(i)}` enum added to `app.rs`; wired as a parameter but not yet carried in `AppState` (slice 10 does that). 175 tests pass.
+- Slices 1–9 committed. Slice 10 wires the live cursor: `AppState.cursor`, `move_cursor_left/right`, `initial_cursor` picks Stock / Discard / Hand(0) based on legal actions. New `actions.rs` resolver maps `(KeyIntent, CursorPos, legal)` → `Resolved::{Accept, Reject, MoveLeft, MoveRight, Quit, NoOp}`. Input: `←/→` move, `Enter` acts on the hovered tile (Stock → DrawStock, Discard → DrawDiscard, Hand(i) → Discard(hand[i])), `d/c/p` discard / close / pass, `q`/`Esc` quit. The numbered 1..0 menu is gone; a bindings footer replaces it, greying out illegal keys. 197 tests pass.
 
 ## Done
 

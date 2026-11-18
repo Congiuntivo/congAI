@@ -6,6 +6,7 @@
 //! holds game state beyond the server's last `Observation`; the server
 //! is still the only authoritative source.
 
+pub mod actions;
 pub mod app;
 pub mod driver;
 pub mod input;
