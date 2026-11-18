@@ -4,12 +4,19 @@
 //! enough that the slice-6 regression tests can run thousands of
 //! matches in a few seconds (D29).
 
-use conga_core::{Action, Event, HandResult, MatchStatus, RandomChance, RuleSet, Seat};
+use std::time::Duration;
+
+use conga_core::{
+    Action, Event, HandResult, MatchStatus, Observation, RandomChance, RuleSet, Seat,
+};
 use conga_server::MatchState;
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 
+use crate::greedy::GreedyPlayer;
 use crate::player::Player;
+use crate::random::RandomPlayer;
+use crate::rule_based::RuleBasedPlayer;
 
 /// Final state of one head-to-head match.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,6 +185,175 @@ where
         a_on_seat_0: m1,
         a_on_seat_1: m2,
     }
+}
+
+/// Enum over the baseline agents so the `conga-cli eval` dispatcher
+/// (and tests) can pick one by name without monomorphising for every
+/// (A, B) pair. Each variant wraps a concrete `Player`; the trait impl
+/// just forwards.
+pub enum BaselineAgent {
+    // `RandomPlayer<ChaCha8Rng>` is ~304 bytes because ChaCha8 keeps a
+    // block buffer; the other variants are tiny. Box it to keep the
+    // enum compact and avoid clippy's large-variant warning.
+    Random(Box<RandomPlayer<ChaCha8Rng>>),
+    Greedy(GreedyPlayer),
+    RuleBased(RuleBasedPlayer),
+}
+
+impl BaselineAgent {
+    /// `name` is one of `random`, `greedy`, `rule-based`. `seed` is
+    /// used only by the random agent (the other two are deterministic).
+    pub fn from_name(name: &str, seed: u64) -> Option<Self> {
+        match name {
+            "random" => Some(BaselineAgent::Random(Box::new(RandomPlayer::from_seed(
+                seed,
+            )))),
+            "greedy" => Some(BaselineAgent::Greedy(GreedyPlayer::new())),
+            "rule-based" => Some(BaselineAgent::RuleBased(RuleBasedPlayer::new())),
+            _ => None,
+        }
+    }
+
+    pub fn names() -> &'static [&'static str] {
+        &["random", "greedy", "rule-based"]
+    }
+}
+
+impl Player for BaselineAgent {
+    fn act(&mut self, obs: &Observation, legal: &[Action]) -> Action {
+        match self {
+            BaselineAgent::Random(p) => p.act(obs, legal),
+            BaselineAgent::Greedy(p) => p.act(obs, legal),
+            BaselineAgent::RuleBased(p) => p.act(obs, legal),
+        }
+    }
+
+    fn notify(&mut self, event: &Event) {
+        match self {
+            BaselineAgent::Random(p) => p.notify(event),
+            BaselineAgent::Greedy(p) => p.notify(event),
+            BaselineAgent::RuleBased(p) => p.notify(event),
+        }
+    }
+}
+
+/// Aggregated statistics across a batch of paired matches.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EvalReport {
+    pub games: u32,
+    pub a_wins: u32,
+    pub b_wins: u32,
+    pub draws: u32,
+    pub mean_a_score: f64,
+    pub mean_b_score: f64,
+    pub hands_per_match: f64,
+    pub duration_ms: u64,
+    pub decisions_per_second: f64,
+}
+
+impl EvalReport {
+    pub fn a_win_rate(&self) -> f64 {
+        if self.games == 0 {
+            0.0
+        } else {
+            self.a_wins as f64 / self.games as f64
+        }
+    }
+
+    /// 95% Wilson score interval on agent A's win rate.
+    pub fn a_win_rate_ci(&self) -> (f64, f64) {
+        wilson_ci(self.a_wins, self.games, 1.96)
+    }
+}
+
+/// Fold a list of `PairedResult`s plus the wall-clock duration into an
+/// `EvalReport`. Each pair contributes exactly two matches; agent A is
+/// seat 0 in the first match and seat 1 in the second.
+pub fn report_from_pairs(pairs: &[PairedResult], duration: Duration) -> EvalReport {
+    let mut a_wins = 0u32;
+    let mut b_wins = 0u32;
+    let mut draws = 0u32;
+    let mut a_score_sum: i64 = 0;
+    let mut b_score_sum: i64 = 0;
+    let mut total_hands: u64 = 0;
+    let mut total_decisions: u64 = 0;
+
+    for pair in pairs {
+        // Match 1: A is seat 0, B is seat 1.
+        match pair.a_on_seat_0.winner_seat {
+            Some(s) if s == Seat::new(0) => a_wins += 1,
+            Some(s) if s == Seat::new(1) => b_wins += 1,
+            _ => draws += 1,
+        }
+        if pair.a_on_seat_0.final_scores.len() >= 2 {
+            a_score_sum += pair.a_on_seat_0.final_scores[0] as i64;
+            b_score_sum += pair.a_on_seat_0.final_scores[1] as i64;
+        }
+        total_hands += pair.a_on_seat_0.hands_played as u64;
+        total_decisions += pair.a_on_seat_0.decisions;
+
+        // Match 2: A is seat 1, B is seat 0.
+        match pair.a_on_seat_1.winner_seat {
+            Some(s) if s == Seat::new(1) => a_wins += 1,
+            Some(s) if s == Seat::new(0) => b_wins += 1,
+            _ => draws += 1,
+        }
+        if pair.a_on_seat_1.final_scores.len() >= 2 {
+            a_score_sum += pair.a_on_seat_1.final_scores[1] as i64;
+            b_score_sum += pair.a_on_seat_1.final_scores[0] as i64;
+        }
+        total_hands += pair.a_on_seat_1.hands_played as u64;
+        total_decisions += pair.a_on_seat_1.decisions;
+    }
+
+    let games = (pairs.len() as u32).saturating_mul(2);
+    let games_f = games as f64;
+    let duration_s = duration.as_secs_f64().max(1e-9);
+
+    EvalReport {
+        games,
+        a_wins,
+        b_wins,
+        draws,
+        mean_a_score: if games > 0 {
+            a_score_sum as f64 / games_f
+        } else {
+            0.0
+        },
+        mean_b_score: if games > 0 {
+            b_score_sum as f64 / games_f
+        } else {
+            0.0
+        },
+        hands_per_match: if games > 0 {
+            total_hands as f64 / games_f
+        } else {
+            0.0
+        },
+        duration_ms: duration.as_millis() as u64,
+        decisions_per_second: total_decisions as f64 / duration_s,
+    }
+}
+
+/// Wilson score interval. Returns `(lo, hi)` clamped to `[0.0, 1.0]`.
+/// `wins` is the number of successes out of `n` trials; `z` is the
+/// standard-normal critical value (use 1.96 for a 95% interval). On
+/// `n == 0` returns the vacuous interval `(0.0, 1.0)` so callers do
+/// not have to special-case empty samples.
+pub fn wilson_ci(wins: u32, n: u32, z: f64) -> (f64, f64) {
+    if n == 0 {
+        return (0.0, 1.0);
+    }
+    let n = n as f64;
+    let p = wins as f64 / n;
+    let z2 = z * z;
+    let denom = 1.0 + z2 / n;
+    let center = (p + z2 / (2.0 * n)) / denom;
+    let margin = (z / denom) * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt();
+    (
+        (center - margin).clamp(0.0, 1.0),
+        (center + margin).clamp(0.0, 1.0),
+    )
 }
 
 /// Play `pairs` paired matches using consecutive seeds starting at

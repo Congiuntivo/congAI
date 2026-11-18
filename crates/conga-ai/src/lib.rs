@@ -13,7 +13,10 @@ pub mod random;
 pub mod rule_based;
 
 pub use driver::{DriverError, run_player};
-pub use eval::{MatchOutcome, PairedResult, run_batch, run_match, run_paired};
+pub use eval::{
+    BaselineAgent, EvalReport, MatchOutcome, PairedResult, report_from_pairs, run_batch, run_match,
+    run_paired, wilson_ci,
+};
 pub use greedy::GreedyPlayer;
 pub use player::Player;
 pub use random::RandomPlayer;

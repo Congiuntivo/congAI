@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 3 (baseline agents + evaluation harness)
-- Slice: 4 (headless match runner) — done, awaiting review
+- Slice: 5 (EvalReport + Wilson CI + `conga-cli eval`) — done, awaiting review
 - Branch: `m3-baselines-eval`
 - Last accepted tag: `m2-accepted`
 - Plan: `docs/plans/m3.md` (approved 2026-11-18)
-- Slices 1–4 committed. Slice 4 adds `conga_ai::eval` with `run_match`, `run_paired`, `run_batch`, `MatchOutcome` and `PairedResult`. The runner drives the engine directly (`rules.legal_actions` → `agent.act` → `rules.apply`), reuses `conga_server::MatchState` for score tracking and dealer rotation, and delivers every event (including a synthetic `HandEnded`) to both agents via `notify`. `run_paired` plays the same seed twice with seats swapped; `run_batch(pairs, start_seed)` runs `pairs` consecutive paired matches. Soft smoke test: greedy beats random over 10 paired matches (seed `0xBEEF`). 239 tests pass.
+- Slices 1–5 committed. Slice 5 adds `BaselineAgent` (enum over Random/Greedy/RuleBased, `from_name`, `Player` impl), `EvalReport` + `report_from_pairs` folding, `wilson_ci` for 95% intervals, and a new `conga-cli eval --a <agent> --b <agent> --games <N> --seed <u64>` subcommand. Smoke: `greedy vs random, 500 games, seed 1` → greedy 500-0 with Wilson CI `[99.24%, 100%]`. 253 tests pass.
 
 ## Done
 
@@ -28,4 +28,4 @@ None.
 
 ## Next
 
-- Milestone 3, slice 5: `EvalReport` + Wilson CI + `conga-cli eval` subcommand.
+- Milestone 3, slice 6: exit-test regression (2000-game greedy>random and rule-based>greedy, Wilson lower bound > 0.5).
