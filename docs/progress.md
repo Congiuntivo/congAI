@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 3 (baseline agents + evaluation harness)
-- Slice: 3 (`RuleBasedPlayer`) — done, awaiting review
+- Slice: 4 (headless match runner) — done, awaiting review
 - Branch: `m3-baselines-eval`
 - Last accepted tag: `m2-accepted`
 - Plan: `docs/plans/m3.md` (approved 2026-11-18)
-- Slices 1–3 committed. Slice 3 adds `RuleBasedPlayer` per D28: greedy's decisions, but when greedy's discard pick is tied by rank with other legal discards the agent scores each by a safety signal and picks the lowest-risk one. Signals: visible meld extension on the table (+10 per meld it would extend), opponent's recent pickup from discard (+5 same rank, +3 adjacent rank same suit). State kept via `notify()`: `last_discarded` + per-seat pickup lists, cleared on `HandEnded`. Delegates all non-discard decisions to greedy. 233 tests pass.
+- Slices 1–4 committed. Slice 4 adds `conga_ai::eval` with `run_match`, `run_paired`, `run_batch`, `MatchOutcome` and `PairedResult`. The runner drives the engine directly (`rules.legal_actions` → `agent.act` → `rules.apply`), reuses `conga_server::MatchState` for score tracking and dealer rotation, and delivers every event (including a synthetic `HandEnded`) to both agents via `notify`. `run_paired` plays the same seed twice with seats swapped; `run_batch(pairs, start_seed)` runs `pairs` consecutive paired matches. Soft smoke test: greedy beats random over 10 paired matches (seed `0xBEEF`). 239 tests pass.
 
 ## Done
 
@@ -28,4 +28,4 @@ None.
 
 ## Next
 
-- Milestone 3, slice 4: headless match runner + paired deals (`conga-ai::eval`).
+- Milestone 3, slice 5: `EvalReport` + Wilson CI + `conga-cli eval` subcommand.

@@ -6,12 +6,14 @@
 //! m4.
 
 pub mod driver;
+pub mod eval;
 pub mod greedy;
 pub mod player;
 pub mod random;
 pub mod rule_based;
 
 pub use driver::{DriverError, run_player};
+pub use eval::{MatchOutcome, PairedResult, run_batch, run_match, run_paired};
 pub use greedy::GreedyPlayer;
 pub use player::Player;
 pub use random::RandomPlayer;
