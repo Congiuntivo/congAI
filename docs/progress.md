@@ -4,10 +4,12 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone: 3 (baseline agents + evaluation harness) — planning
-- Slice: n/a
-- Branch: `main` (m3 branch to be created from the accepted plan)
+- Milestone: 3 (baseline agents + evaluation harness)
+- Slice: 0 (plan saved) — ready to start slice 1
+- Branch: `m3-baselines-eval`
 - Last accepted tag: `m2-accepted`
+- Plan: `docs/plans/m3.md` (approved 2026-11-18)
+- Decisions D26–D30 logged in `docs/decisions.md` in the plan-save commit.
 
 ## Done
 
@@ -26,4 +28,4 @@ None.
 
 ## Next
 
-- Milestone 3 planning: baseline agents (greedy, rule-based) + evaluation harness in `conga-ai` and `conga-cli`. Stay in plan mode, propose slices, save to `docs/plans/m3.md` after approval.
+- Milestone 3, slice 1: make `Player::act` synchronous (D26). Touches `conga-ai` only; `RandomPlayer` and the `run_player` driver follow.

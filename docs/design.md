@@ -515,12 +515,14 @@ Thirteen points are not addressed yet. The first four can invalidate results, so
 
 The work runs in ten steps, and each step ends with a test that can fail. Network play comes last on purpose.
 
+Status (2026-11-18): steps 0, 1 and 2 are accepted (tags `setup-accepted`, `m1-accepted`, `m2-accepted`). Step 3 is in progress on branch `m3-baselines-eval` with the plan at `docs/plans/m3.md`.
+
 | Step | Deliverable | Exit test |
 | --- | --- | --- |
 | 0 | Confirmed ruleset | All 6 showdown details answered and stored in a `RuleSet` |
 | 1 | Core engine with the rule set trait, the meld solver and your variant as the first rule set | The conformance tests pass on a large batch of random games. A logged game replays to identical states |
 | 2 | Game server, protocol, in-memory transport, TUI | You play a full match against the random agent and replay it from its log |
-| 3 | Baseline agents and evaluation harness | Random loses to greedy and greedy loses to rule-based, each outside the confidence interval. Rollouts per second measured |
+| 3 | Baseline agents and evaluation harness | Random loses to greedy and greedy loses to rule-based, each outside the confidence interval. Rollouts per second measured (recorded as "decisions per second" for baseline agents, see D30) |
 | 4 | Belief tracker and search agent | The search agent beats the rule-based agent outside the confidence interval |
 | 5 | Match equity and score-aware play | The score-aware agent beats its score-blind version over full matches |
 | 6 | Explanation tools and the validation loop | The first tactic passes the loop on fresh seeds |
