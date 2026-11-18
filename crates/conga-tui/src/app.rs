@@ -1,7 +1,7 @@
 //! `AppState`: everything the renderer needs. The driver updates it on
 //! each server message; `render::draw` reads it.
 
-use conga_core::{Action, Card, Event, HandResult, MatchStatus, Observation};
+use conga_core::{Action, Card, Event, Hand, HandResult, MatchStatus, Observation};
 
 use crate::suits::SuitTheme;
 
@@ -24,6 +24,24 @@ pub enum Mode {
     Normal,
     LayMeldCycle { variants: Vec<Action>, index: usize },
     AddToMeldCycle { variants: Vec<Action>, index: usize },
+}
+
+/// Rebuild a display order for the hand: keep cards from `prior` that
+/// are still in `new_hand` (preserving their relative order), then
+/// append the cards in `new_hand` that weren't in `prior` (in the
+/// hand's canonical iteration order). Pure so it's unit-testable.
+pub fn rebuild_hand_order(prior: &[Card], new_hand: Hand) -> Vec<Card> {
+    let mut next: Vec<Card> = prior
+        .iter()
+        .copied()
+        .filter(|c| new_hand.contains(*c))
+        .collect();
+    for c in new_hand.iter() {
+        if !next.contains(&c) {
+            next.push(c);
+        }
+    }
+    next
 }
 
 /// Choose a reasonable starting cursor for a new `AwaitAction`: Stock if
@@ -58,6 +76,10 @@ pub struct AppState {
     /// Which tile the cursor points at. Reset to `initial_cursor` when
     /// `AwaitAction` arrives.
     pub cursor: CursorPos,
+    /// Display order of the own hand. Rebuilt from each `Observe` so
+    /// cards the player has already reordered keep their positions;
+    /// newly-drawn cards are appended. `Shift+←/→` swap neighbors.
+    pub hand_order: Vec<Card>,
     /// Interaction mode: `Normal` for cursor-driven play, cycle modes
     /// for the meld builder.
     pub mode: Mode,
@@ -81,6 +103,7 @@ impl AppState {
             observation: None,
             legal: Vec::new(),
             cursor: CursorPos::Stock,
+            hand_order: Vec::new(),
             mode: Mode::Normal,
             last_hand_result: None,
             match_status: None,
@@ -90,10 +113,48 @@ impl AppState {
     }
 
     fn hand_size(&self) -> usize {
-        self.observation
-            .as_ref()
-            .map(|o| o.own_hand.len() as usize)
-            .unwrap_or(0)
+        self.hand_order.len()
+    }
+
+    /// The hand card under the cursor, or `None` if the cursor is on
+    /// Stock / Discard or past the end of the hand.
+    pub fn hand_card_at_cursor(&self) -> Option<Card> {
+        match self.cursor {
+            CursorPos::Hand(i) => self.hand_order.get(i).copied(),
+            _ => None,
+        }
+    }
+
+    /// Rebuild `hand_order` from the server's new hand. Cards that
+    /// were already in the display order keep their places; cards no
+    /// longer in the hand are dropped; newly-dealt cards are appended.
+    pub fn update_hand_order(&mut self, new_hand: Hand) {
+        self.hand_order = rebuild_hand_order(&self.hand_order, new_hand);
+    }
+
+    /// Swap the selected card with its left neighbor; the cursor
+    /// follows the card. No-op on non-hand cursors or at the left
+    /// edge.
+    pub fn swap_cursor_left(&mut self) {
+        if let CursorPos::Hand(i) = self.cursor
+            && i > 0
+            && i < self.hand_order.len()
+        {
+            self.hand_order.swap(i - 1, i);
+            self.cursor = CursorPos::Hand(i - 1);
+        }
+    }
+
+    /// Swap the selected card with its right neighbor; the cursor
+    /// follows the card. No-op on non-hand cursors or at the right
+    /// edge.
+    pub fn swap_cursor_right(&mut self) {
+        if let CursorPos::Hand(i) = self.cursor
+            && i + 1 < self.hand_order.len()
+        {
+            self.hand_order.swap(i, i + 1);
+            self.cursor = CursorPos::Hand(i + 1);
+        }
     }
 
     /// Move the cursor one tile left. Stops at Stock.

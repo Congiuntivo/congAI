@@ -7,6 +7,10 @@ fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
+fn shift(code: KeyCode) -> KeyEvent {
+    KeyEvent::new(code, KeyModifiers::SHIFT)
+}
+
 #[test]
 fn arrow_keys_move_the_cursor() {
     assert_eq!(key_to_intent(&key(KeyCode::Left)), KeyIntent::MoveLeft);
@@ -43,6 +47,12 @@ fn q_quits_and_esc_cancels() {
     assert_eq!(key_to_intent(&key(KeyCode::Char('q'))), KeyIntent::Quit);
     assert_eq!(key_to_intent(&key(KeyCode::Char('Q'))), KeyIntent::Quit);
     assert_eq!(key_to_intent(&key(KeyCode::Esc)), KeyIntent::Cancel);
+}
+
+#[test]
+fn shift_arrows_swap() {
+    assert_eq!(key_to_intent(&shift(KeyCode::Left)), KeyIntent::SwapLeft);
+    assert_eq!(key_to_intent(&shift(KeyCode::Right)), KeyIntent::SwapRight);
 }
 
 #[test]

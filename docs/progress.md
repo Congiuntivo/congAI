@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 2 (game server, protocol, in-memory transport, TUI)
-- Slice: 11 (TUI redesign — meld cycle mode) — done, awaiting review
+- Slice: 12 (TUI redesign — manual card reorder) — done, awaiting review
 - Branch: `m2-server-tui`
 - Last accepted tag: `m1-accepted`
 - Plan: `docs/plans/m2.md` (approved 2026-11-17; TUI redesign slices 8–12 appended 2026-11-18)
-- Slices 1–10 committed. Slice 11 adds meld-cycle mode: `AppState.mode` is `Normal | LayMeldCycle{variants, index} | AddToMeldCycle{variants, index}`. `m` / `a` from Normal enter the respective cycle populated from the already-filtered legal set; `←/→` rotate with wrap; `Enter` commits; `Esc` cancels back to Normal (a new `KeyIntent::Cancel`, distinct from `KeyIntent::Quit` on `q`). The hand strip highlights the current meld's cards; the bindings footer swaps to cycle verbs; the status line shows `lay meld 2/3: Lay meld [7♣ 7♦ 7♥]`. `resolve_cycle(intent) -> CycleResolved` is the pure helper for cycle-mode dispatch. 209 tests pass.
+- Slices 1–11 committed. Slice 12 adds manual card reorder. `AppState.hand_order: Vec<Card>` is the display order; `update_hand_order` + `rebuild_hand_order` keep previously-reordered cards in place across `Observe` updates and append new ones at the end. `Shift+←` / `Shift+→` swap the hovered hand card with its neighbor (cursor follows). The strip and the resolver both read `hand_order` rather than the sorted `Hand::iter()`. `resolve` now takes a `hand_order: &[Card]` instead of `&Observation`. 220 tests pass. Milestone 2 is ready for the exit-test playthrough.
 
 ## Done
 

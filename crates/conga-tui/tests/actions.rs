@@ -1,6 +1,6 @@
-//! Resolver: KeyIntent + CursorPos + legal → Resolved.
+//! Resolver: KeyIntent + CursorPos + hand_order + legal → Resolved.
 
-use conga_core::{Action, Card, Hand, Observation, Phase, Rank, Seat, Suit};
+use conga_core::{Action, Card, Hand, Rank, Suit};
 use conga_tui::KeyIntent;
 use conga_tui::actions::{CycleResolved, Resolved, resolve, resolve_cycle};
 use conga_tui::app::CursorPos;
@@ -10,19 +10,10 @@ fn c(suit: Suit, rank: u8) -> Card {
     Card::new(suit, Rank::new(rank).unwrap())
 }
 
-fn obs_with_hand(cards: &[Card]) -> Observation {
-    Observation {
-        own_seat: Seat::new(0),
-        current_seat: Seat::new(0),
-        phase: Phase::Discard,
-        own_hand: Hand::from(cards),
-        top_discard: Some(c(Suit::Spades, 5)),
-        discard_history: vec![c(Suit::Spades, 5)],
-        stock_size: 25,
-        melds_on_table: Vec::new(),
-        scores: vec![0, 0],
-        hand_sizes: vec![cards.len() as u8, 7],
-    }
+/// Sorted display order for a hand, matching the default `hand_order`
+/// populated by `update_hand_order` on the first `Observe`.
+fn sorted_hand(cards: &[Card]) -> Vec<Card> {
+    Hand::from(cards).iter().collect()
 }
 
 fn is_accept(r: &Resolved, expected: &Action) -> bool {
@@ -38,12 +29,12 @@ fn reject_msg(r: &Resolved) -> &str {
 
 #[test]
 fn enter_on_stock_resolves_to_draw_stock_when_legal() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::DrawStock, Action::DrawDiscard];
     let r = resolve(
         KeyIntent::Activate,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -52,12 +43,12 @@ fn enter_on_stock_resolves_to_draw_stock_when_legal() {
 
 #[test]
 fn enter_on_discard_resolves_to_draw_discard_when_legal() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::DrawStock, Action::DrawDiscard];
     let r = resolve(
         KeyIntent::Activate,
         CursorPos::Discard,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -65,34 +56,30 @@ fn enter_on_discard_resolves_to_draw_discard_when_legal() {
 }
 
 #[test]
-fn enter_on_hand_is_the_discard_of_that_card() {
-    let hand = [c(Suit::Clubs, 1), c(Suit::Hearts, 2)];
-    let obs = obs_with_hand(&hand);
-    // Hand::iter yields ascending card indices; sorted order is
-    // 1♣ (index 0) then 2♥ (index 11). CursorPos::Hand(1) means the
-    // SECOND card in the sorted iter — 2♥.
-    let sorted: Vec<Card> = obs.own_hand.iter().collect();
-    assert_eq!(sorted.len(), 2);
-    let second = sorted[1];
-    let legal = vec![Action::Discard(second), Action::Discard(sorted[0])];
+fn enter_on_hand_is_the_discard_of_the_card_at_that_display_index() {
+    // Pass a reordered hand: 2♥ first, 1♣ second. CursorPos::Hand(1)
+    // should resolve to Discard(1♣), not Discard of the sorted-order
+    // second card.
+    let hand = vec![c(Suit::Hearts, 2), c(Suit::Clubs, 1)];
+    let legal = vec![Action::Discard(hand[1]), Action::Discard(hand[0])];
     let r = resolve(
         KeyIntent::Activate,
         CursorPos::Hand(1),
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
-    assert!(is_accept(&r, &Action::Discard(second)));
+    assert!(is_accept(&r, &Action::Discard(hand[1])));
 }
 
 #[test]
 fn enter_on_stock_rejects_when_not_in_legal() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal: Vec<Action> = vec![Action::DrawDiscard];
     let r = resolve(
         KeyIntent::Activate,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -102,28 +89,26 @@ fn enter_on_stock_rejects_when_not_in_legal() {
 
 #[test]
 fn c_on_hand_resolves_to_close_when_legal() {
-    let hand = [c(Suit::Clubs, 1), c(Suit::Hearts, 2)];
-    let obs = obs_with_hand(&hand);
-    let sorted: Vec<Card> = obs.own_hand.iter().collect();
-    let legal = vec![Action::Close(sorted[0])];
+    let hand = sorted_hand(&[c(Suit::Clubs, 1), c(Suit::Hearts, 2)]);
+    let legal = vec![Action::Close(hand[0])];
     let r = resolve(
         KeyIntent::CloseSelected,
         CursorPos::Hand(0),
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
-    assert!(is_accept(&r, &Action::Close(sorted[0])));
+    assert!(is_accept(&r, &Action::Close(hand[0])));
 }
 
 #[test]
 fn p_resolves_to_pass_when_legal() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::Pass];
     let r = resolve(
         KeyIntent::Pass,
         CursorPos::Hand(0),
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -132,19 +117,19 @@ fn p_resolves_to_pass_when_legal() {
 
 #[test]
 fn move_intents_return_movement_variants() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::DrawStock];
     let l = resolve(
         KeyIntent::MoveLeft,
         CursorPos::Discard,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
     let r = resolve(
         KeyIntent::MoveRight,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -153,13 +138,35 @@ fn move_intents_return_movement_variants() {
 }
 
 #[test]
+fn shift_arrow_intents_return_swap_variants() {
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
+    let legal = vec![Action::DrawStock];
+    let l = resolve(
+        KeyIntent::SwapLeft,
+        CursorPos::Hand(0),
+        &hand,
+        &legal,
+        SuitTheme::French,
+    );
+    let r = resolve(
+        KeyIntent::SwapRight,
+        CursorPos::Hand(0),
+        &hand,
+        &legal,
+        SuitTheme::French,
+    );
+    assert!(matches!(l, Resolved::SwapLeft));
+    assert!(matches!(r, Resolved::SwapRight));
+}
+
+#[test]
 fn quit_intent_returns_quit() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand: Vec<Card> = Vec::new();
     let legal: Vec<Action> = vec![];
     let q = resolve(
         KeyIntent::Quit,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -168,12 +175,12 @@ fn quit_intent_returns_quit() {
 
 #[test]
 fn ignored_intent_is_noop() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::DrawStock];
     let n = resolve(
         KeyIntent::Ignored,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -182,12 +189,12 @@ fn ignored_intent_is_noop() {
 
 #[test]
 fn m_resolves_to_enter_lay_meld() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::DrawStock];
     let r = resolve(
         KeyIntent::MeldMode,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -196,12 +203,12 @@ fn m_resolves_to_enter_lay_meld() {
 
 #[test]
 fn a_resolves_to_enter_add_meld() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::DrawStock];
     let r = resolve(
         KeyIntent::AddMode,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -210,12 +217,12 @@ fn a_resolves_to_enter_add_meld() {
 
 #[test]
 fn cancel_intent_resolves_to_cancel() {
-    let obs = obs_with_hand(&[c(Suit::Clubs, 1)]);
+    let hand = sorted_hand(&[c(Suit::Clubs, 1)]);
     let legal = vec![Action::DrawStock];
     let r = resolve(
         KeyIntent::Cancel,
         CursorPos::Stock,
-        &obs,
+        &hand,
         &legal,
         SuitTheme::French,
     );
@@ -231,4 +238,6 @@ fn cycle_resolver_maps_the_cycle_keys() {
     assert_eq!(resolve_cycle(KeyIntent::Quit), CycleResolved::Quit);
     assert_eq!(resolve_cycle(KeyIntent::MeldMode), CycleResolved::Ignore);
     assert_eq!(resolve_cycle(KeyIntent::Pass), CycleResolved::Ignore);
+    assert_eq!(resolve_cycle(KeyIntent::SwapLeft), CycleResolved::Ignore);
+    assert_eq!(resolve_cycle(KeyIntent::SwapRight), CycleResolved::Ignore);
 }

@@ -122,6 +122,7 @@ where
         match msg {
             ServerToClient::Observe { turn, observation } => {
                 state.latest_turn = turn;
+                state.update_hand_order(observation.own_hand);
                 state.observation = Some(observation);
                 state.clear_legal();
             }
@@ -130,7 +131,7 @@ where
                 state.reset_cursor();
                 state.exit_mode();
                 state.status_line =
-                    "your turn — ← → move, Enter act, c close, m meld, a add, p pass, q quit"
+                    "your turn — ← → move, ⇧← ⇧→ reorder, Enter act, c close, m meld, a add, p pass, q quit"
                         .into();
                 let action = read_action(&mut guard, &mut state).await?;
                 transport
@@ -178,10 +179,6 @@ async fn read_action(guard: &mut TerminalGuard, state: &mut AppState) -> Result<
         guard.terminal().draw(|f| draw(f, state))?;
         let key = next_key().await?;
         let intent = key_to_intent(&key);
-        let obs = state
-            .observation
-            .clone()
-            .expect("AwaitAction without a prior Observe");
         if state.is_in_cycle_mode() {
             match resolve_cycle(intent) {
                 CycleResolved::Prev => {
@@ -212,12 +209,20 @@ async fn read_action(guard: &mut TerminalGuard, state: &mut AppState) -> Result<
             }
             continue;
         }
-        let resolved = resolve(intent, state.cursor, &obs, &state.legal, state.theme);
+        let resolved = resolve(
+            intent,
+            state.cursor,
+            &state.hand_order,
+            &state.legal,
+            state.theme,
+        );
         match resolved {
             Resolved::Accept(action) => return Ok(action),
             Resolved::Reject(msg) => state.status_line = msg,
             Resolved::MoveLeft => state.move_cursor_left(),
             Resolved::MoveRight => state.move_cursor_right(),
+            Resolved::SwapLeft => state.swap_cursor_left(),
+            Resolved::SwapRight => state.swap_cursor_right(),
             Resolved::EnterLayMeld => {
                 if state.enter_lay_meld_mode() {
                     if let Some(s) = cycle_status_line(state) {

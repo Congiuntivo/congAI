@@ -321,9 +321,12 @@ pub fn render_discard_tile(
 /// 5th hint line below (stock count and best-meld split). `cursor`
 /// highlights one tile with a double border; `highlighted_cards`
 /// additionally highlights any hand card in the set (used by cycle
-/// mode to show which cards a meld variant covers).
+/// mode to show which cards a meld variant covers). `hand_order`
+/// drives the tile order; the caller is responsible for keeping it
+/// in sync with `obs.own_hand`.
 pub fn render_hand_strip(
     obs: &Observation,
+    hand_order: &[Card],
     cursor: Option<CursorPos>,
     highlighted_cards: &[Card],
     theme: SuitTheme,
@@ -331,8 +334,7 @@ pub fn render_hand_strip(
     let stock = render_stock_tile(cursor == Some(CursorPos::Stock));
     let discard = render_discard_tile(obs.top_discard, cursor == Some(CursorPos::Discard), theme);
 
-    let cards: Vec<Card> = obs.own_hand.iter().collect();
-    let hand: Vec<Vec<Line<'static>>> = cards
+    let hand: Vec<Vec<Line<'static>>> = hand_order
         .iter()
         .enumerate()
         .map(|(i, c)| {
@@ -399,7 +401,7 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     let hand_lines = state
         .observation
         .as_ref()
-        .map(|o| render_hand_strip(o, cursor, &highlighted, state.theme))
+        .map(|o| render_hand_strip(o, &state.hand_order, cursor, &highlighted, state.theme))
         .unwrap_or_else(|| vec![Line::from(Span::raw("(no observation yet)".to_string()))]);
     frame.render_widget(
         Paragraph::new(hand_lines)
@@ -460,12 +462,7 @@ pub fn render_bindings_footer(state: &AppState) -> Line<'static> {
 
 fn normal_bindings_footer(state: &AppState) -> Line<'static> {
     let legal_active = state.is_my_turn();
-    let obs = state.observation.as_ref();
-
-    let hand_card = match (state.cursor, obs) {
-        (CursorPos::Hand(i), Some(o)) => o.own_hand.iter().nth(i),
-        _ => None,
-    };
+    let hand_card = state.hand_card_at_cursor();
 
     let (enter_label, enter_legal) = match state.cursor {
         CursorPos::Stock => ("draw", state.legal.contains(&Action::DrawStock)),

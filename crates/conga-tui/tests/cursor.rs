@@ -1,7 +1,7 @@
 //! Cursor movement + initial-slot heuristic.
 
 use conga_core::{Action, Card, Hand, Meld, MeldKind, Observation, Phase, Rank, Seat, Suit};
-use conga_tui::app::{AppState, CursorPos, Mode, initial_cursor};
+use conga_tui::app::{AppState, CursorPos, Mode, initial_cursor, rebuild_hand_order};
 use conga_tui::suits::SuitTheme;
 
 fn c(suit: Suit, rank: u8) -> Card {
@@ -25,7 +25,9 @@ fn obs_with_hand(cards: &[Card]) -> Observation {
 
 fn state_with_hand(cards: &[Card], legal: Vec<Action>) -> AppState {
     let mut s = AppState::new(0, 2, SuitTheme::French);
-    s.observation = Some(obs_with_hand(cards));
+    let obs = obs_with_hand(cards);
+    s.update_hand_order(obs.own_hand);
+    s.observation = Some(obs);
     s.legal = legal;
     s.reset_cursor();
     s
@@ -233,4 +235,112 @@ fn exit_mode_returns_to_normal() {
     s.exit_mode();
     assert!(!s.is_in_cycle_mode());
     assert!(matches!(s.mode, Mode::Normal));
+}
+
+#[test]
+fn rebuild_hand_order_preserves_prior_order_and_appends_new_cards() {
+    let a = c(Suit::Clubs, 1);
+    let b = c(Suit::Clubs, 2);
+    let d = c(Suit::Clubs, 4);
+    let e = c(Suit::Clubs, 5);
+    let prior = vec![a, b, d];
+    // New hand drops b and adds e.
+    let new_hand = Hand::from(&[a, d, e][..]);
+    let next = rebuild_hand_order(&prior, new_hand);
+    assert_eq!(next, vec![a, d, e]);
+}
+
+#[test]
+fn rebuild_hand_order_is_stable_when_hand_is_unchanged() {
+    // Pick cards that span suits so the default Hand::iter order
+    // differs from the prior order we feed in.
+    let a = c(Suit::Clubs, 3);
+    let b = c(Suit::Hearts, 5);
+    let d = c(Suit::Spades, 2);
+    let prior = vec![b, d, a];
+    let new_hand = Hand::from(&[a, b, d][..]);
+    let next = rebuild_hand_order(&prior, new_hand);
+    assert_eq!(next, vec![b, d, a], "stable order expected");
+}
+
+#[test]
+fn rebuild_hand_order_from_empty_prior_uses_hand_iter_order() {
+    let a = c(Suit::Clubs, 3);
+    let b = c(Suit::Hearts, 5);
+    let new_hand = Hand::from(&[a, b][..]);
+    let next = rebuild_hand_order(&[], new_hand);
+    assert_eq!(next, new_hand.iter().collect::<Vec<_>>());
+}
+
+#[test]
+fn swap_cursor_right_swaps_neighbors_and_cursor_follows() {
+    let hand = [c(Suit::Clubs, 1), c(Suit::Clubs, 2), c(Suit::Clubs, 3)];
+    let mut s = state_with_hand(&hand, vec![Action::DrawStock]);
+    s.cursor = CursorPos::Hand(1);
+    let before = s.hand_order.clone();
+    s.swap_cursor_right();
+    // hand_order[1] and hand_order[2] swapped; cursor moved to 2.
+    assert_eq!(s.cursor, CursorPos::Hand(2));
+    assert_eq!(s.hand_order[1], before[2]);
+    assert_eq!(s.hand_order[2], before[1]);
+}
+
+#[test]
+fn swap_cursor_left_swaps_neighbors_and_cursor_follows() {
+    let hand = [c(Suit::Clubs, 1), c(Suit::Clubs, 2), c(Suit::Clubs, 3)];
+    let mut s = state_with_hand(&hand, vec![Action::DrawStock]);
+    s.cursor = CursorPos::Hand(2);
+    let before = s.hand_order.clone();
+    s.swap_cursor_left();
+    assert_eq!(s.cursor, CursorPos::Hand(1));
+    assert_eq!(s.hand_order[1], before[2]);
+    assert_eq!(s.hand_order[2], before[1]);
+}
+
+#[test]
+fn swap_cursor_right_at_last_card_is_a_noop() {
+    let hand = [c(Suit::Clubs, 1), c(Suit::Clubs, 2)];
+    let mut s = state_with_hand(&hand, vec![Action::DrawStock]);
+    s.cursor = CursorPos::Hand(1);
+    let before = s.hand_order.clone();
+    s.swap_cursor_right();
+    assert_eq!(s.cursor, CursorPos::Hand(1));
+    assert_eq!(s.hand_order, before);
+}
+
+#[test]
+fn swap_cursor_left_at_first_card_is_a_noop() {
+    let hand = [c(Suit::Clubs, 1), c(Suit::Clubs, 2)];
+    let mut s = state_with_hand(&hand, vec![Action::DrawStock]);
+    s.cursor = CursorPos::Hand(0);
+    let before = s.hand_order.clone();
+    s.swap_cursor_left();
+    assert_eq!(s.cursor, CursorPos::Hand(0));
+    assert_eq!(s.hand_order, before);
+}
+
+#[test]
+fn swap_cursor_on_non_hand_position_is_a_noop() {
+    let hand = [c(Suit::Clubs, 1), c(Suit::Clubs, 2)];
+    let mut s = state_with_hand(&hand, vec![Action::DrawStock]);
+    s.cursor = CursorPos::Stock;
+    let before = s.hand_order.clone();
+    s.swap_cursor_right();
+    s.swap_cursor_left();
+    assert_eq!(s.cursor, CursorPos::Stock);
+    assert_eq!(s.hand_order, before);
+}
+
+#[test]
+fn hand_card_at_cursor_reads_from_hand_order() {
+    let hand = [c(Suit::Clubs, 1), c(Suit::Hearts, 2)];
+    let mut s = state_with_hand(&hand, vec![Action::DrawStock]);
+    // Default order is Hand::iter order (ascending card index): 1♣ then 2♥.
+    assert_eq!(s.hand_order, vec![c(Suit::Clubs, 1), c(Suit::Hearts, 2)]);
+    s.cursor = CursorPos::Hand(0);
+    assert_eq!(s.hand_card_at_cursor(), Some(c(Suit::Clubs, 1)));
+    s.swap_cursor_right();
+    // Cursor now at Hand(1); card under it is still 1♣ (the swapped one).
+    assert_eq!(s.cursor, CursorPos::Hand(1));
+    assert_eq!(s.hand_card_at_cursor(), Some(c(Suit::Clubs, 1)));
 }

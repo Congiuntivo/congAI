@@ -5,12 +5,16 @@
 //! the current mode" rather than always quit (the driver falls back to
 //! Quit when the mode is already `Normal`).
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyIntent {
     MoveLeft,
     MoveRight,
+    /// Shift+←: swap the hovered hand card with its left neighbor.
+    SwapLeft,
+    /// Shift+→: swap the hovered hand card with its right neighbor.
+    SwapRight,
     /// Enter: commit — Normal: act on the hovered tile; Cycle: commit
     /// the currently-pointed meld variant.
     Activate,
@@ -31,7 +35,10 @@ pub enum KeyIntent {
 }
 
 pub fn key_to_intent(key: &KeyEvent) -> KeyIntent {
+    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
     match key.code {
+        KeyCode::Left if shift => KeyIntent::SwapLeft,
+        KeyCode::Right if shift => KeyIntent::SwapRight,
         KeyCode::Left => KeyIntent::MoveLeft,
         KeyCode::Right => KeyIntent::MoveRight,
         KeyCode::Enter => KeyIntent::Activate,

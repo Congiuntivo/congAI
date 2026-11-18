@@ -1,8 +1,9 @@
-//! Translate a `KeyIntent` plus cursor + legal actions into a concrete
-//! `Action`, or an error message the status line can display. Pure
-//! function so it's testable without a terminal.
+//! Translate a `KeyIntent` plus cursor + hand display order + legal
+//! actions into a concrete `Action`, or an error message the status
+//! line can display. Pure functions so they're testable without a
+//! terminal.
 
-use conga_core::{Action, Card, Observation};
+use conga_core::{Action, Card};
 
 use crate::app::CursorPos;
 use crate::input::KeyIntent;
@@ -12,15 +13,18 @@ use crate::suits::SuitTheme;
 /// Result of resolving a key intent against Normal-mode state.
 /// `Accept` commits the action; `Reject` feeds the message to the
 /// status line; `MoveLeft` / `MoveRight` ask the driver to move the
-/// cursor; `EnterLayMeld` / `EnterAddMeld` ask the driver to switch
-/// to the corresponding cycle mode; `Cancel` means `Esc` was hit in
-/// Normal (the driver treats it as a quit at this level). Cycle-mode
-/// keys are resolved by [`resolve_cycle`] instead.
+/// cursor; `SwapLeft` / `SwapRight` ask it to swap the hovered hand
+/// card with its neighbor in the display order; `EnterLayMeld` /
+/// `EnterAddMeld` switch to the matching cycle mode; `Cancel` is
+/// `Esc` in Normal (driver treats it as quit). Cycle-mode keys are
+/// resolved by [`resolve_cycle`] instead.
 pub enum Resolved {
     Accept(Action),
     Reject(String),
     MoveLeft,
     MoveRight,
+    SwapLeft,
+    SwapRight,
     EnterLayMeld,
     EnterAddMeld,
     Cancel,
@@ -41,8 +45,9 @@ pub enum CycleResolved {
 }
 
 /// Cycle-mode key resolution: movement rotates the index, Enter
-/// commits, Esc cancels, q quits. Everything else is ignored so stray
-/// keystrokes don't eject the user from the mode.
+/// commits, Esc cancels, q quits. Shift+arrows (reorder) are ignored
+/// in cycle mode. Everything else is ignored so stray keystrokes do
+/// not eject the user from the mode.
 pub fn resolve_cycle(intent: KeyIntent) -> CycleResolved {
     match intent {
         KeyIntent::MoveLeft => CycleResolved::Prev,
@@ -57,20 +62,22 @@ pub fn resolve_cycle(intent: KeyIntent) -> CycleResolved {
 pub fn resolve(
     intent: KeyIntent,
     cursor: CursorPos,
-    obs: &Observation,
+    hand_order: &[Card],
     legal: &[Action],
     theme: SuitTheme,
 ) -> Resolved {
     match intent {
         KeyIntent::MoveLeft => Resolved::MoveLeft,
         KeyIntent::MoveRight => Resolved::MoveRight,
+        KeyIntent::SwapLeft => Resolved::SwapLeft,
+        KeyIntent::SwapRight => Resolved::SwapRight,
         KeyIntent::MeldMode => Resolved::EnterLayMeld,
         KeyIntent::AddMode => Resolved::EnterAddMeld,
         KeyIntent::Cancel => Resolved::Cancel,
         KeyIntent::Quit => Resolved::Quit,
         KeyIntent::Ignored => Resolved::NoOp,
-        KeyIntent::Activate => resolve_activate(cursor, obs, legal, theme),
-        KeyIntent::CloseSelected => resolve_close(cursor, obs, legal, theme),
+        KeyIntent::Activate => resolve_activate(cursor, hand_order, legal, theme),
+        KeyIntent::CloseSelected => resolve_close(cursor, hand_order, legal, theme),
         KeyIntent::Pass => {
             if legal.contains(&Action::Pass) {
                 Resolved::Accept(Action::Pass)
@@ -83,7 +90,7 @@ pub fn resolve(
 
 fn resolve_activate(
     cursor: CursorPos,
-    obs: &Observation,
+    hand_order: &[Card],
     legal: &[Action],
     theme: SuitTheme,
 ) -> Resolved {
@@ -102,7 +109,7 @@ fn resolve_activate(
                 Resolved::Reject("drawing from discard is not legal right now".into())
             }
         }
-        CursorPos::Hand(i) => match hand_card(obs, i) {
+        CursorPos::Hand(i) => match hand_order.get(i).copied() {
             Some(card) => {
                 let act = Action::Discard(card);
                 if legal.contains(&act) {
@@ -121,12 +128,12 @@ fn resolve_activate(
 
 fn resolve_close(
     cursor: CursorPos,
-    obs: &Observation,
+    hand_order: &[Card],
     legal: &[Action],
     theme: SuitTheme,
 ) -> Resolved {
     match cursor {
-        CursorPos::Hand(i) => match hand_card(obs, i) {
+        CursorPos::Hand(i) => match hand_order.get(i).copied() {
             Some(card) => {
                 let act = Action::Close(card);
                 if legal.contains(&act) {
@@ -142,8 +149,4 @@ fn resolve_close(
         },
         _ => Resolved::Reject("move the cursor onto a hand card first".into()),
     }
-}
-
-fn hand_card(obs: &Observation, index: usize) -> Option<Card> {
-    obs.own_hand.iter().nth(index)
 }
