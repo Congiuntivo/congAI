@@ -196,6 +196,7 @@ fn hand_ended_resets_opponent_pickups() {
         points: vec![0, 0],
         closer: None,
         bonus: None,
+        terminal: conga_core::HandTerminal::Closed,
     }));
 
     // After HandEnded the memory of seat-1 picking up 6♣ is gone, so

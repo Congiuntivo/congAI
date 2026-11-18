@@ -2,7 +2,8 @@
 
 use conga_ai::{Player, RandomPlayer, run_player};
 use conga_core::{
-    Action, Bonus, Card, Hand, HandResult, MatchStatus, Observation, Phase, Rank, Seat, Suit,
+    Action, Bonus, Card, Hand, HandResult, HandTerminal, MatchStatus, Observation, Phase, Rank,
+    Seat, Suit,
 };
 use conga_protocol::{ClientToServer, ServerToClient};
 use conga_server::{Transport, in_memory_pair};
@@ -189,6 +190,7 @@ async fn driver_delivers_events_to_notify() {
                     points: vec![0, 10],
                     closer: None,
                     bonus: None,
+                    terminal: HandTerminal::Closed,
                 }),
             })
             .await

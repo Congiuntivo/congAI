@@ -23,8 +23,8 @@ use std::ops::RangeInclusive;
 
 use conga_core::{
     Action, ActionList, Bonus, Card, Chance, CloseParams, DeckSpec, DrawSource, Event, Hand,
-    HandEval, HandResult, MatchStatus, Meld, MeldKind, MeldParams, Observation, Phase, Rank, Rng,
-    RuleSet, RuleSetId, Seat, Suit, best_meld_split, evaluate_hand, standard_40,
+    HandEval, HandResult, HandTerminal, MatchStatus, Meld, MeldKind, MeldParams, Observation,
+    Phase, Rank, Rng, RuleSet, RuleSetId, Seat, Suit, best_meld_split, evaluate_hand, standard_40,
 };
 
 use crate::state::State;
@@ -230,6 +230,12 @@ impl StandardConga {
         chance: &mut dyn Chance,
         events: &mut Vec<Event>,
     ) {
+        if state.reshuffles_this_hand >= 3 {
+            // D31: cap at 3 reshuffles per hand. A 4th attempt is a
+            // stalemate signal; the hand ends on the next `hand_result`.
+            state.stalemate_pending = true;
+            return;
+        }
         if state.discard_pile.len() <= 1 {
             // Nothing to reshuffle.
             return;
@@ -243,6 +249,7 @@ impl StandardConga {
         if let Some(t) = top {
             state.discard_pile.push(t);
         }
+        state.reshuffles_this_hand += 1;
     }
 }
 
@@ -317,6 +324,8 @@ impl RuleSet for StandardConga {
             closer_has_opened: false,
             showdown_consecutive_passes: 0,
             face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
         }
     }
 
@@ -429,11 +438,12 @@ impl RuleSet for StandardConga {
                         state.phase = Phase::Discard;
                     }
                     None => {
-                        // Stock was empty and the discard pile had only its
-                        // top card: no cards available to draw. Slice 5 does
-                        // not yet define this terminal condition; the test
-                        // policy with a turn cap never reaches it.
-                        unreachable!("stock empty after reshuffle attempt; terminal case deferred");
+                        // D31: stock empty after reshuffle attempt. Either
+                        // the cap fired (stalemate_pending already set) or
+                        // the discard pile was too small to reshuffle. In
+                        // both cases the hand cannot progress; route to
+                        // stalemate so `hand_result` returns a `Stalemate`.
+                        state.stalemate_pending = true;
                     }
                 }
             }
@@ -545,6 +555,16 @@ impl RuleSet for StandardConga {
     }
 
     fn hand_result(&self, state: &State) -> Option<HandResult> {
+        if state.stalemate_pending {
+            // D31: reshuffle cap hit or discard too small to reshuffle.
+            // All seats score 0, no bonus, no closer.
+            return Some(HandResult {
+                points: vec![0; state.seats_count as usize],
+                closer: None,
+                bonus: None,
+                terminal: HandTerminal::Stalemate,
+            });
+        }
         if state.phase != Phase::Ended {
             return None;
         }
@@ -578,6 +598,7 @@ impl RuleSet for StandardConga {
             points,
             closer: state.closer,
             bonus,
+            terminal: HandTerminal::Closed,
         })
     }
 
@@ -796,6 +817,8 @@ mod tests {
             closer_has_opened: false,
             showdown_consecutive_passes: 0,
             face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
         };
         let mut actions = ActionList::new();
         rules.legal_actions(&state, &mut actions);
@@ -838,6 +861,8 @@ mod tests {
             closer_has_opened: false,
             showdown_consecutive_passes: 0,
             face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
         };
         let mut actions = ActionList::new();
         rules.legal_actions(&state, &mut actions);
@@ -938,6 +963,94 @@ mod tests {
         assert_eq!(state.discard_pile.len(), 1);
         assert_eq!(*state.discard_pile.last().unwrap(), pile_top_before);
         assert!(events.iter().any(|e| matches!(e, Event::Shuffled(_))));
+        assert_eq!(state.reshuffles_this_hand, 1);
+    }
+
+    // --- stalemate (D31) ---
+
+    #[test]
+    fn new_hand_starts_with_zero_reshuffles_and_no_pending_stalemate() {
+        let rules = StandardConga::new();
+        let mut rng = chance(1);
+        let state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
+        assert_eq!(state.reshuffles_this_hand, 0);
+        assert!(!state.stalemate_pending);
+        assert!(rules.hand_result(&state).is_none());
+    }
+
+    #[test]
+    fn fourth_reshuffle_attempt_triggers_stalemate_pending() {
+        let rules = StandardConga::new();
+        let mut rng = chance(2);
+        let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
+        state.reshuffles_this_hand = 3;
+        // Force a stock-empty condition with a non-trivial pile so the
+        // pile-size check would otherwise allow a reshuffle.
+        let pile_top = state.discard_pile.pop();
+        let mut pile: Vec<Card> = std::mem::take(&mut state.stock);
+        if let Some(t) = pile_top {
+            pile.push(t);
+        } else {
+            pile.push(c(Suit::Clubs, 2));
+        }
+        state.discard_pile = pile;
+        assert!(state.stock.is_empty());
+        assert!(state.discard_pile.len() > 1);
+        let mut events = Vec::new();
+        rules.reshuffle_discard_into_stock(&mut state, &mut rng, &mut events);
+        assert!(state.stalemate_pending, "4th reshuffle must set the flag");
+        assert_eq!(state.reshuffles_this_hand, 3, "counter stays at the cap");
+        assert!(events.is_empty(), "no shuffle event on the aborted 4th");
+        // hand_result now returns a Stalemate terminal.
+        let result = rules.hand_result(&state).expect("stalemate terminal");
+        assert_eq!(result.terminal, HandTerminal::Stalemate);
+        assert_eq!(result.closer, None);
+        assert_eq!(result.bonus, None);
+        assert!(result.points.iter().all(|&p| p == 0));
+    }
+
+    #[test]
+    fn drawstock_with_stock_empty_and_discard_too_small_produces_stalemate() {
+        let rules = StandardConga::new();
+        let mut rng = chance(3);
+        let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
+        // Starter discards to put seat 0 in Draw phase.
+        let starter_card = state.hands[1].iter().next().unwrap();
+        let mut events = Vec::new();
+        rules.apply(
+            &mut state,
+            Action::Discard(starter_card),
+            &mut rng,
+            &mut events,
+        );
+        // Synthesise: empty stock, pile of exactly 1 card (the top). The
+        // engine cannot reshuffle (pile <= 1) and cannot draw (stock empty).
+        state.stock.clear();
+        state.discard_pile.truncate(1);
+        events.clear();
+        rules.apply(&mut state, Action::DrawStock, &mut rng, &mut events);
+        assert!(state.stalemate_pending);
+        let result = rules
+            .hand_result(&state)
+            .expect("stalemate when nothing to draw or reshuffle");
+        assert_eq!(result.terminal, HandTerminal::Stalemate);
+    }
+
+    #[test]
+    fn hand_result_returns_closed_terminal_after_normal_showdown() {
+        // Synthesise an Ended-phase state (no stalemate flag) and check
+        // the terminal tag is `Closed`.
+        let rules = StandardConga::new();
+        let mut rng = chance(4);
+        let mut state = rules.new_hand(&[0, 0], Seat::new(0), &mut rng);
+        state.phase = Phase::Ended;
+        state.closer = Some(Seat::new(0));
+        state.hands[0] = Hand::EMPTY;
+        state.hands[1] = Hand::EMPTY;
+        let result = rules
+            .hand_result(&state)
+            .expect("ended phase, no stalemate");
+        assert_eq!(result.terminal, HandTerminal::Closed);
     }
 
     // --- invariants over random games ---
@@ -1176,6 +1289,8 @@ mod tests {
             closer_has_opened: false,
             showdown_consecutive_passes: 0,
             face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
         };
 
         let mut events = Vec::new();
@@ -1391,6 +1506,8 @@ mod tests {
             closer_has_opened: false,
             showdown_consecutive_passes: 0,
             face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
         };
         let mut rules_state = state;
         let mut events = Vec::new();
@@ -1706,6 +1823,8 @@ mod tests {
             closer_has_opened: true,
             showdown_consecutive_passes: 0,
             face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
         };
         let mut actions = ActionList::new();
         rules.legal_actions(&state, &mut actions);

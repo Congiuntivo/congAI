@@ -17,6 +17,18 @@ pub enum Bonus {
     MinusFifty,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum HandTerminal {
+    /// A player closed; residuals and bonus scored normally.
+    Closed,
+    /// The hand stalemated (D31, C4): the reshuffle cap of 3 was hit
+    /// without any player closing, or a `DrawStock` found both the
+    /// stock and the reshufflable discard portion empty. Every seat
+    /// scores 0, no bonus, dealer rotates normally.
+    Stalemate,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct HandResult {
@@ -26,6 +38,9 @@ pub struct HandResult {
     pub closer: Option<Seat>,
     /// The bonus the closer earned, if any.
     pub bonus: Option<Bonus>,
+    /// How the hand ended. `Stalemate` implies `closer: None`, `bonus:
+    /// None` and `points` all zero.
+    pub terminal: HandTerminal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,10 +97,25 @@ mod tests {
             points: vec![-10, 12, 8],
             closer: Some(Seat::new(0)),
             bonus: Some(Bonus::MinusTen),
+            terminal: HandTerminal::Closed,
         };
         assert_eq!(r.points.len(), 3);
         assert_eq!(r.closer, Some(Seat::new(0)));
         assert_eq!(r.bonus, Some(Bonus::MinusTen));
+        assert_eq!(r.terminal, HandTerminal::Closed);
+    }
+
+    #[test]
+    fn stalemate_hand_result_shape() {
+        let r = HandResult {
+            points: vec![0, 0],
+            closer: None,
+            bonus: None,
+            terminal: HandTerminal::Stalemate,
+        };
+        assert_eq!(r.terminal, HandTerminal::Stalemate);
+        assert!(r.closer.is_none() && r.bonus.is_none());
+        assert!(r.points.iter().all(|&p| p == 0));
     }
 
     #[test]
@@ -132,6 +162,7 @@ mod tests {
                 points: vec![0, 0],
                 closer: None,
                 bonus: None,
+                terminal: HandTerminal::Stalemate,
             }),
         ];
         // Each event's debug representation is non-empty and distinct.
@@ -149,11 +180,13 @@ mod tests {
             points: vec![3, 7],
             closer: Some(Seat::new(0)),
             bonus: None,
+            terminal: HandTerminal::Closed,
         };
         let r2 = HandResult {
             points: vec![3, 7],
             closer: Some(Seat::new(0)),
             bonus: None,
+            terminal: HandTerminal::Closed,
         };
         assert_eq!(r1, r2);
     }

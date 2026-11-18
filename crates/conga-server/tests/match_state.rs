@@ -1,7 +1,7 @@
 //! Unit tests for `MatchState`. Uses `StandardConga` as the rule set so
 //! the `match_status` call goes through the real rule-16 logic.
 
-use conga_core::{Bonus, HandResult, MatchStatus, Seat};
+use conga_core::{Bonus, HandResult, HandTerminal, MatchStatus, Seat};
 use conga_rules::StandardConga;
 use conga_server::MatchState;
 
@@ -28,6 +28,7 @@ fn finish_hand_folds_points_bumps_count_rotates_dealer() {
         points: vec![5, 12, -10],
         closer: Some(Seat::new(2)),
         bonus: Some(Bonus::MinusTen),
+        terminal: HandTerminal::Closed,
     };
     m.finish_hand(&r, &hand);
     assert_eq!(m.scores, vec![5, 12, -10]);
@@ -44,6 +45,7 @@ fn dealer_rotates_through_every_seat() {
         points: vec![0, 0, 0, 0],
         closer: None,
         bonus: None,
+        terminal: HandTerminal::Stalemate,
     };
     for i in 0..4 {
         m.finish_hand(&r, &zero);
@@ -60,6 +62,7 @@ fn finish_hand_sets_status_to_winner_when_someone_passes_100() {
         points: vec![0, 101],
         closer: Some(Seat::new(0)),
         bonus: None,
+        terminal: HandTerminal::Closed,
     };
     m.finish_hand(&r, &hand);
     assert_eq!(m.status, MatchStatus::Winner(Seat::new(0)));
@@ -75,6 +78,7 @@ fn rule_16_tie_break_picks_lowest_score_on_simultaneous_elimination() {
         points: vec![110, 105, 102],
         closer: None,
         bonus: None,
+        terminal: HandTerminal::Closed,
     };
     m.finish_hand(&r, &hand);
     match m.status {
@@ -92,6 +96,7 @@ fn finish_hand_rejects_wrong_seat_count() {
         points: vec![1, 2, 3],
         closer: None,
         bonus: None,
+        terminal: HandTerminal::Closed,
     };
     m.finish_hand(&r, &hand);
 }

@@ -5,11 +5,11 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone: 3 (baseline agents + evaluation harness)
-- Slice: 5 (EvalReport + Wilson CI + `conga-cli eval`) — done, awaiting review
+- Slice: 6 (stalemate terminal, D31) — done, awaiting review
 - Branch: `m3-baselines-eval`
 - Last accepted tag: `m2-accepted`
-- Plan: `docs/plans/m3.md` (approved 2026-11-18)
-- Slices 1–5 committed. Slice 5 adds `BaselineAgent` (enum over Random/Greedy/RuleBased, `from_name`, `Player` impl), `EvalReport` + `report_from_pairs` folding, `wilson_ci` for 95% intervals, and a new `conga-cli eval --a <agent> --b <agent> --games <N> --seed <u64>` subcommand. Smoke: `greedy vs random, 500 games, seed 1` → greedy 500-0 with Wilson CI `[99.24%, 100%]`. 253 tests pass.
+- Plan: `docs/plans/m3.md` (approved 2026-11-18; slice 6 inserted 2026-11-18)
+- Slice 6 adds `HandTerminal { Closed, Stalemate }` to `conga-core`, caps `StandardConga` at 3 reshuffles per hand (4th attempt flips `stalemate_pending`), replaces the deprecated `unreachable!` on empty-stock + too-small-pile with the same stalemate flag, and surfaces a `Stalemate` hand result (all seats score 0). Fixes the hang found in slice 5 playtesting where two deterministic greedy-style agents could cycle forever. Logged as D31; rule clarification C4 in `docs/design.md`. Previously-hanging `greedy vs greedy, 50 games, seed 1` now runs in 4.7s (25-25, 13.36 hands/match); `rule-based vs greedy, 50 games` runs in 5.1s. 261 tests pass (+8 new: 4 engine, 2 AI termination, 2 serde).
 
 ## Done
 
@@ -25,7 +25,8 @@ None.
 ## Deviations from the design doc
 
 - D14: `RuleSet::sample_state` signature uses `&mut dyn Rng` (rand_core 0.10 deprecated `RngCore`). Design doc updated in the same commit.
+- D31: A new slice 6 (stalemate terminal) was inserted into the m3 plan ahead of the originally-numbered slice 6; exit-test regression is now slice 7. Reason: slice 5 playtesting surfaced an infinite-loop in two deterministic agents that required an engine-level fix before the regression could run.
 
 ## Next
 
-- Milestone 3, slice 6: exit-test regression (2000-game greedy>random and rule-based>greedy, Wilson lower bound > 0.5).
+- Milestone 3, slice 7: exit-test regression (2000-game greedy>random and rule-based>greedy, Wilson lower bound > 0.5). Slice 6's stalemate fix unblocks the rule-based side.

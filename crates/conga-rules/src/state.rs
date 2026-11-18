@@ -44,4 +44,12 @@ pub struct State {
     /// The face-down card placed by `Close(c)`. Kept so every card remains
     /// accounted for in the state; not exposed in observations.
     pub face_down_close: Option<Card>,
+    /// Number of completed reshuffles during this hand. Cap of 3 per D31:
+    /// the 4th attempt flips `stalemate_pending` instead of reshuffling.
+    pub reshuffles_this_hand: u8,
+    /// Set when the engine can no longer make progress (D31):
+    /// the reshuffle cap of 3 is reached and a 4th reshuffle would fire,
+    /// or `DrawStock` finds stock empty and discard has only its top card.
+    /// `hand_result` reads this flag and returns `HandTerminal::Stalemate`.
+    pub stalemate_pending: bool,
 }
