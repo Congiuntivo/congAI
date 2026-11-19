@@ -12,6 +12,7 @@ pub mod greedy;
 pub mod player;
 pub mod random;
 pub mod rule_based;
+pub mod search;
 
 pub use belief::BeliefTracker;
 pub use driver::{DriverError, run_player};
@@ -23,3 +24,4 @@ pub use greedy::GreedyPlayer;
 pub use player::Player;
 pub use random::RandomPlayer;
 pub use rule_based::RuleBasedPlayer;
+pub use search::SearchPlayer;

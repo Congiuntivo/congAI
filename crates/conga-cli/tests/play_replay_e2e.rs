@@ -161,6 +161,8 @@ fn cli_rejects_players_other_than_two() {
         players: 3,
         log_path: temp_log_path("badplayers"),
         theme: SuitTheme::French,
+        ai: "random".into(),
+        samples: 50,
     };
     let err = play::run(opts).expect_err("3 players should fail");
     assert!(matches!(err, play::PlayError::UnsupportedPlayers(3)));

@@ -43,6 +43,9 @@ pub struct EvalOptions {
     pub agent_b: String,
     pub games: u32,
     pub seed: u64,
+    /// Belief-samples per decision for the `search` agent on either
+    /// side. Ignored by the deterministic / random agents.
+    pub samples: u32,
 }
 
 /// Run the eval and write a human-readable report to `out`. Returns
@@ -57,12 +60,19 @@ pub fn run<W: Write>(opts: EvalOptions, mut out: W) -> Result<EvalReport, EvalEr
     let seed_b = opts.seed.wrapping_add(SEED_B_SALT);
     let agent_a_name = opts.agent_a.clone();
     let agent_b_name = opts.agent_b.clone();
+    let samples = opts.samples;
 
     let start = Instant::now();
     let results = run_batch(
         &rules,
-        || BaselineAgent::from_name(&agent_a_name, seed_a).expect("validated above"),
-        || BaselineAgent::from_name(&agent_b_name, seed_b).expect("validated above"),
+        || {
+            BaselineAgent::from_name_with_samples(&agent_a_name, seed_a, samples)
+                .expect("validated above")
+        },
+        || {
+            BaselineAgent::from_name_with_samples(&agent_b_name, seed_b, samples)
+                .expect("validated above")
+        },
         pairs,
         opts.seed,
         Seat::new(1),

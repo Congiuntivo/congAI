@@ -17,6 +17,7 @@ use crate::greedy::GreedyPlayer;
 use crate::player::Player;
 use crate::random::RandomPlayer;
 use crate::rule_based::RuleBasedPlayer;
+use crate::search::SearchPlayer;
 
 /// Final state of one head-to-head match.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,24 +199,40 @@ pub enum BaselineAgent {
     Random(Box<RandomPlayer<ChaCha8Rng>>),
     Greedy(GreedyPlayer),
     RuleBased(RuleBasedPlayer),
+    Search(Box<SearchPlayer>),
 }
 
+/// Default number of belief-sampled worlds the search expands per act
+/// call. Used by [`BaselineAgent::from_name`] when the caller does not
+/// override it. See D33.
+pub const DEFAULT_SEARCH_SAMPLES: u32 = 50;
+
 impl BaselineAgent {
-    /// `name` is one of `random`, `greedy`, `rule-based`. `seed` is
-    /// used only by the random agent (the other two are deterministic).
+    /// `name` is one of `random`, `greedy`, `rule-based`, `search`.
+    /// `seed` drives the random agent's RNG and the search agent's
+    /// belief sampling + rollout RNG. The search agent uses
+    /// [`DEFAULT_SEARCH_SAMPLES`]; for a custom count see
+    /// [`BaselineAgent::from_name_with_samples`].
     pub fn from_name(name: &str, seed: u64) -> Option<Self> {
+        Self::from_name_with_samples(name, seed, DEFAULT_SEARCH_SAMPLES)
+    }
+
+    pub fn from_name_with_samples(name: &str, seed: u64, samples: u32) -> Option<Self> {
         match name {
             "random" => Some(BaselineAgent::Random(Box::new(RandomPlayer::from_seed(
                 seed,
             )))),
             "greedy" => Some(BaselineAgent::Greedy(GreedyPlayer::new())),
             "rule-based" => Some(BaselineAgent::RuleBased(RuleBasedPlayer::new())),
+            "search" => Some(BaselineAgent::Search(Box::new(SearchPlayer::new(
+                samples, seed,
+            )))),
             _ => None,
         }
     }
 
     pub fn names() -> &'static [&'static str] {
-        &["random", "greedy", "rule-based"]
+        &["random", "greedy", "rule-based", "search"]
     }
 }
 
@@ -225,6 +242,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Random(p) => p.act(obs, legal),
             BaselineAgent::Greedy(p) => p.act(obs, legal),
             BaselineAgent::RuleBased(p) => p.act(obs, legal),
+            BaselineAgent::Search(p) => p.act(obs, legal),
         }
     }
 
@@ -233,6 +251,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Random(p) => p.notify(event),
             BaselineAgent::Greedy(p) => p.notify(event),
             BaselineAgent::RuleBased(p) => p.notify(event),
+            BaselineAgent::Search(p) => p.notify(event),
         }
     }
 }

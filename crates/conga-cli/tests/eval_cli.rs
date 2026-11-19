@@ -12,6 +12,7 @@ fn eval_prints_a_report_for_random_vs_random() {
         agent_b: "random".into(),
         games: 20,
         seed: 1,
+        samples: 50,
     };
     let mut out = Vec::new();
     let r = run(opts, Cursor::new(&mut out)).expect("eval ran");
@@ -34,6 +35,7 @@ fn eval_greedy_beats_random_cleanly_on_small_sample() {
         agent_b: "random".into(),
         games: 50,
         seed: 0xC0FFEE,
+        samples: 50,
     };
     let mut out = Vec::new();
     let r = run(opts, Cursor::new(&mut out)).expect("eval ran");
@@ -52,6 +54,7 @@ fn eval_rejects_unknown_agent_names() {
         agent_b: "random".into(),
         games: 2,
         seed: 1,
+        samples: 50,
     };
     let err = run(opts, Cursor::new(Vec::new())).expect_err("mcts should be rejected");
     assert!(matches!(err, EvalError::UnknownAgent(ref n) if n == "mcts"));
@@ -65,6 +68,7 @@ fn eval_games_is_rounded_up_to_the_next_even_number_of_matches() {
         agent_b: "random".into(),
         games: 3,
         seed: 1,
+        samples: 50,
     };
     let mut out = Vec::new();
     let r = run(opts, Cursor::new(&mut out)).expect("eval ran");
