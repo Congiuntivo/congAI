@@ -104,6 +104,7 @@ Edge-case readings of the rules above that the engine encodes. Each is custom to
 | C1 | Rule 6 | `Close(c)` with the card just taken from the top of the discard pile is **legal**. Rule 6 forbids only the face-up re-discard (the "free pass"). A close is a face-down discard that ends the hand, so rule 6's purpose does not apply. See D15 | Keeps a technically-legal move available; removing it would only prune a rarely-useful corner case |
 | C2 | Showdown detail (c) | The closer's `Pass` in their first showdown turn is legal **only** when their remaining hand is itself a closing residual (≤ 2 cards summing ≤ 5). They must physically lay down the melds of some closing split; a 7-card hand whose best split happens to close is not enough. See D16 | "Lay down a split" in detail (c) implies physical placement. The alternative (hand's best split is enough on its own) lets the closer hide their melds, which contradicts the server-check wording and hands the closer a strategic edge the design doc did not contemplate |
 | C3 | Rules 4 and 16 | **The starter (seat after the dealer) is dealt one extra card.** The discard pile begins empty. The starter's first action is a `Discard`, not a `Draw` + `Discard`. Subsequent turns and all other seats follow the standard draw-then-discard structure in rule 4. The first-turn close ban in rule 5 still applies. See D17 | How Simone's table plays it. Equivalent to "deal 7 to each, turn the top card as the discard, starter draws it" in terms of hand sizes, but keeps the extra card private (no face-up card shown at the start of the hand) |
+| C4 | Rule 14 | **Stalemate terminal.** A hand ends as a `Stalemate` when the engine would do a 4th reshuffle in the same hand (reshuffle count capped at 3) or when a `DrawStock` finds both the stock and the reshufflable discard portion empty. On stalemate every seat scores 0, no bonus, dealer rotates normally. `HandResult` carries this distinction as `terminal: HandTerminal { Closed, Stalemate }`. See D31 | Rule 14 is silent about what happens when reshuffles cycle forever without any player closing. Two deterministic agents can hit this state in the main Discard phase because `Close(c)` is only legal with a 7-melded + 1 close-card configuration; many hands never reach it. Giving up after 3 reshuffles guarantees every hand terminates, and the "nobody won → everyone scores 0" reading keeps match progression driven by closes (not by stall-and-bleed) |
 
 ## Architecture
 
@@ -515,12 +516,14 @@ Thirteen points are not addressed yet. The first four can invalidate results, so
 
 The work runs in ten steps, and each step ends with a test that can fail. Network play comes last on purpose.
 
+Status (2026-11-18): steps 0, 1 and 2 are accepted (tags `setup-accepted`, `m1-accepted`, `m2-accepted`). Step 3 is in progress on branch `m3-baselines-eval` with the plan at `docs/plans/m3.md`.
+
 | Step | Deliverable | Exit test |
 | --- | --- | --- |
 | 0 | Confirmed ruleset | All 6 showdown details answered and stored in a `RuleSet` |
 | 1 | Core engine with the rule set trait, the meld solver and your variant as the first rule set | The conformance tests pass on a large batch of random games. A logged game replays to identical states |
 | 2 | Game server, protocol, in-memory transport, TUI | You play a full match against the random agent and replay it from its log |
-| 3 | Baseline agents and evaluation harness | Random loses to greedy and greedy loses to rule-based, each outside the confidence interval. Rollouts per second measured |
+| 3 | Baseline agents and evaluation harness | Random loses to greedy and greedy loses to rule-based, each outside the confidence interval. Rollouts per second measured (recorded as "decisions per second" for baseline agents, see D30) |
 | 4 | Belief tracker and search agent | The search agent beats the rule-based agent outside the confidence interval |
 | 5 | Match equity and score-aware play | The score-aware agent beats its score-blind version over full matches |
 | 6 | Explanation tools and the validation loop | The first tactic passes the loop on fresh seeds |

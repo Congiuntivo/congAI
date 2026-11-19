@@ -7,8 +7,8 @@
 use std::io::{BufReader, Cursor};
 
 use conga_core::{
-    Action, Bonus, Card, DrawSource, Event, Hand, HandResult, MatchStatus, Meld, MeldKind,
-    Observation, Phase, Rank, Seat, Suit,
+    Action, Bonus, Card, DrawSource, Event, Hand, HandResult, HandTerminal, MatchStatus, Meld,
+    MeldKind, Observation, Phase, Rank, Seat, Suit,
 };
 use conga_protocol::{
     ClientToServer, Envelope, ErrorCode, PROTOCOL_VERSION, ProtocolError, ServerToClient,
@@ -152,6 +152,7 @@ fn server_hand_ended_round_trips() {
             points: vec![-10, 8],
             closer: Some(Seat::new(0)),
             bonus: Some(Bonus::MinusTen),
+            terminal: HandTerminal::Closed,
         },
     });
 }

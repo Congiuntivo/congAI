@@ -11,8 +11,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::{
-    Action, Bonus, Card, DrawSource, Event, GameLog, Hand, HandResult, MatchStatus, Meld, MeldKind,
-    Observation, Phase, Rank, RuleSetId, Seat, Suit,
+    Action, Bonus, Card, DrawSource, Event, GameLog, Hand, HandResult, HandTerminal, MatchStatus,
+    Meld, MeldKind, Observation, Phase, Rank, RuleSetId, Seat, Suit,
 };
 
 fn c(suit: Suit, rank: u8) -> Card {
@@ -152,6 +152,7 @@ fn every_event_variant_round_trips() {
             points: vec![-10, 12],
             closer: Some(Seat::new(0)),
             bonus: Some(Bonus::MinusTen),
+            terminal: HandTerminal::Closed,
         }),
     ];
     for e in events {
@@ -219,11 +220,28 @@ fn hand_result_golden_json() {
         points: vec![-10, 12, 8],
         closer: Some(Seat::new(0)),
         bonus: Some(Bonus::MinusTen),
+        terminal: HandTerminal::Closed,
     };
     let json = serde_json::to_string(&r).unwrap();
     assert_eq!(
         json,
-        "{\"points\":[-10,12,8],\"closer\":0,\"bonus\":\"MinusTen\"}"
+        "{\"points\":[-10,12,8],\"closer\":0,\"bonus\":\"MinusTen\",\"terminal\":\"Closed\"}"
+    );
+    roundtrip(r);
+}
+
+#[test]
+fn stalemate_hand_result_golden_json() {
+    let r = HandResult {
+        points: vec![0, 0],
+        closer: None,
+        bonus: None,
+        terminal: HandTerminal::Stalemate,
+    };
+    let json = serde_json::to_string(&r).unwrap();
+    assert_eq!(
+        json,
+        "{\"points\":[0,0],\"closer\":null,\"bonus\":null,\"terminal\":\"Stalemate\"}"
     );
     roundtrip(r);
 }

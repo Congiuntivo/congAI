@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use conga_cli::{debug_hand, play, replay};
+use conga_cli::{debug_hand, eval, play, replay};
 
 #[derive(Parser)]
 #[command(name = "conga-cli", about = "Conga engine command-line tools")]
@@ -46,6 +46,22 @@ enum Command {
     Replay {
         /// Path to a JSON-lines match log written by `play`.
         log_file: PathBuf,
+    },
+    /// Head-to-head evaluation of two baseline agents.
+    Eval {
+        /// First agent: `random`, `greedy` or `rule-based`.
+        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based"])]
+        agent_a: String,
+        /// Second agent.
+        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based"])]
+        agent_b: String,
+        /// Number of matches to play (rounded up to the nearest even
+        /// number so every chance stream is run with seats swapped).
+        #[arg(long, default_value_t = 1000)]
+        games: u32,
+        /// Base RNG seed. The agents' RNGs are derived from this.
+        #[arg(long)]
+        seed: u64,
     },
 }
 
@@ -99,6 +115,24 @@ fn main() {
                     eprintln!("error: {e}");
                     std::process::exit(1);
                 }
+            }
+        }
+        Command::Eval {
+            agent_a,
+            agent_b,
+            games,
+            seed,
+        } => {
+            let opts = eval::EvalOptions {
+                agent_a,
+                agent_b,
+                games,
+                seed,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = eval::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
             }
         }
     }

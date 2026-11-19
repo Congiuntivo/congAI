@@ -91,6 +91,7 @@ async fn sending_after_peer_drop_returns_channel_closed() {
                 points: vec![0, 0],
                 closer: None,
                 bonus: None,
+                terminal: conga_core::HandTerminal::Closed,
             },
         })
         .await

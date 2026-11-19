@@ -2,5 +2,6 @@
 //! can drive it without going through `clap`.
 
 pub mod debug_hand;
+pub mod eval;
 pub mod play;
 pub mod replay;

@@ -19,7 +19,7 @@ pub use action::{Action, DrawSource};
 pub use card::{Card, Rank, Suit};
 pub use chance::{Chance, RandomChance, ReplayChance};
 pub use deck::{DeckSpec, standard_40};
-pub use event::{Bonus, Event, HandResult};
+pub use event::{Bonus, Event, HandResult, HandTerminal};
 pub use hand::Hand;
 pub use log::{GameLog, ReplayedHand, replay};
 pub use meld::{

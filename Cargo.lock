@@ -254,6 +254,7 @@ version = "0.0.0"
 dependencies = [
  "conga-core",
  "conga-protocol",
+ "conga-rules",
  "conga-server",
  "rand_chacha",
  "rand_core 0.10.1",
