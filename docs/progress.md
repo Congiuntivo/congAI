@@ -4,8 +4,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone: 3 accepted on 2026-11-19, tagged `m3-accepted`. Branch `m3-baselines-eval` kept for history.
-- No open slice. Awaiting Simone's go-ahead to plan m4 (belief tracker + search agent).
+- Milestone 4: belief tracker + search agent. Plan at `docs/plans/m4.md`. Branch `m4-belief-search` from `main` (tag `m3-accepted`).
+- Slice 1 committed (`c9b075e`): `StandardConga::sample_state` + conformance test 5. 266 tests pass, 3 with `--ignored`.
+- Next slice: slice 2, `BeliefTracker` module in `conga-ai`. Awaiting Simone's go-ahead.
 - Last accepted tag: `m3-accepted`
 
 ## Done
