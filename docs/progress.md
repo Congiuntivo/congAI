@@ -4,12 +4,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone: 3 (baseline agents + evaluation harness)
-- Slice: 7 (exit-test regression) — done, awaiting review
-- Branch: `m3-baselines-eval`
-- Last accepted tag: `m2-accepted`
-- Plan: `docs/plans/m3.md` (approved 2026-11-18; slice 6 inserted 2026-11-18; slice 7 deviation 2026-11-19)
-- Slice 7 adds `crates/conga-ai/tests/exit_regressions.rs` with two 2000-game `#[ignore]` tests: `greedy_beats_random` (seed `0xC0FFEE`) and `rule_based_beats_random` (seed `0xBEEF`). Each asserts Wilson 95% lower bound on A-agent win rate > 0.5. Run via `cargo test -p conga-ai --test exit_regressions --release -- --ignored` (~52 s wall). Both pass. `#[ignore]` keeps `cargo test --workspace` fast (otherwise +6 min debug). Deviation from plan: the second test was going to be `rule_based_beats_greedy`; three seed smokes (36%, 36%, 37.5%) proved the D28 heuristic loses to greedy, so we assert rule-based beats random instead and defer the rule-based rework. 261 tests pass by default; 263 with `--ignored`.
+- Milestone: 3 accepted on 2026-11-19, tagged `m3-accepted`. Branch `m3-baselines-eval` kept for history.
+- No open slice. Awaiting Simone's go-ahead to plan m4 (belief tracker + search agent).
+- Last accepted tag: `m3-accepted`
 
 ## Done
 
@@ -17,6 +14,7 @@ Claude updates this file at every stop. A new session reads it first.
 - Milestone 0: the six showdown details a to f confirmed (decisions D8 to D13).
 - Milestone 1: core engine. Merged into `main` on 2026-11-17 and tagged `m1-accepted`. Branch `m1-core-engine` kept for history. 11 slice commits plus one post-playthrough fix (C3): plan + cards/hands/seats + meld solver + action/event/observation types + RuleSet/Chance/conformance + StandardConga playing phase + showdown + scoring with −10 and −50 bonuses + event log and exact replay + debug CLI, then the starter-dealt-8 clarification caught during the playthrough. 84 tests pass (fmt, clippy -D warnings, 300-game replay invariant). Rule clarifications C1, C2, C3 encoded in the engine and logged in `docs/design.md`; decisions D14, D15, D16, D17 logged in `docs/decisions.md`.
 - Milestone 2: game server, protocol, in-memory transport, TUI. Merged into `main` on 2026-11-18 and tagged `m2-accepted`. Branch `m2-server-tui` kept for history. 12 slice commits: serde on protocol-visible types + `conga-protocol` crate + `conga-server` Transport + MatchState / JSON-lines log / hand orchestrator + `conga-ai` crate with `Player` trait and `RandomPlayer` + `conga-tui` terminal client + `conga-cli` play/replay subcommands, then a TUI redesign (slices 8–12) replacing the numbered action list with card-tile rendering, a live cursor, meld-cycle mode and manual card reorder. 220 tests pass. Decisions D18–D25 logged in `docs/decisions.md`.
+- Milestone 3: baseline agents + evaluation harness. Merged into `main` on 2026-11-19 and tagged `m3-accepted`. Branch `m3-baselines-eval` kept for history. 7 slice commits plus one lockfile cleanup: `Player` sync + `GreedyPlayer` (D27) + `RuleBasedPlayer` (D28) + headless runner with paired deals (D29) + `EvalReport` with Wilson CI and `conga-cli eval` + stalemate terminal `HandTerminal { Closed, Stalemate }` (D31, C4) + 2000-game `#[ignore]`d regression. The planned `rule_based_beats_greedy` assertion was dropped: three seed smokes showed D28 loses to greedy at 36–38%, so the shipped regression asserts `rule_based_beats_random` (100%) instead. 261 tests pass (263 with `--ignored`). Decisions D26–D31 logged in `docs/decisions.md`; rule clarification C4 in `docs/design.md`.
 
 ## Open questions for Simone
 
@@ -30,4 +28,4 @@ None.
 
 ## Next
 
-- Rework the rule-based agent (new decision, likely D32) so it actually beats greedy, or defer the stronger rule-based to m4 alongside the belief tracker. Three-seed smokes show D28 loses to greedy by ~28 pp (36% win rate). Simone decides whether to iterate D28 in m3 before tagging `m3-accepted`, or to ship m3 with the current rule-based (verified-vs-random only) and improve it inside m4's belief-tracker work.
+- Milestone 4: belief tracker + search agent. Rule-based v2 (a working D28 successor) is rolled into m4 alongside the belief tracker, since the natural signal for a stronger rule-based agent (what the opponent likely holds) is exactly what the belief tracker produces.
