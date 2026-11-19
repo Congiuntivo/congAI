@@ -5,8 +5,9 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone 4: belief tracker + search agent. Plan at `docs/plans/m4.md`. Branch `m4-belief-search` from `main` (tag `m3-accepted`).
-- Slice 1 committed (`c9b075e`): `StandardConga::sample_state` + conformance test 5. 266 tests pass, 3 with `--ignored`.
-- Next slice: slice 2, `BeliefTracker` module in `conga-ai`. Awaiting Simone's go-ahead.
+- Slice 1 committed (`c9b075e`): `StandardConga::sample_state` + conformance test 5.
+- Slice 2 committed (`225159b`): `BeliefTracker` module (notify / known_held / prob_holds / sample_state). 277 tests pass, 4 with `--ignored`.
+- Next slice: slice 3, `SearchPlayer` (PIMC) + CLI eval + TUI opponent selector. Awaiting Simone's go-ahead.
 - Last accepted tag: `m3-accepted`
 
 ## Done
