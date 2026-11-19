@@ -5,6 +5,7 @@
 //! evaluation harness. The belief tracker and search agent arrive in
 //! m4.
 
+pub mod belief;
 pub mod driver;
 pub mod eval;
 pub mod greedy;
@@ -12,6 +13,7 @@ pub mod player;
 pub mod random;
 pub mod rule_based;
 
+pub use belief::BeliefTracker;
 pub use driver::{DriverError, run_player};
 pub use eval::{
     BaselineAgent, EvalReport, MatchOutcome, PairedResult, report_from_pairs, run_batch, run_match,
