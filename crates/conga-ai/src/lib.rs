@@ -24,4 +24,4 @@ pub use greedy::GreedyPlayer;
 pub use player::Player;
 pub use random::RandomPlayer;
 pub use rule_based::RuleBasedPlayer;
-pub use search::SearchPlayer;
+pub use search::{RolloutPolicy, SearchPlayer};

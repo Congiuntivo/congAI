@@ -15,7 +15,9 @@
 //! covers Draw / Discard (D34); the fast-path also short-circuits when
 //! the engine offers only one legal action.
 
-use conga_core::{Action, ActionList, Event, Observation, Phase, RandomChance, RuleSet, Seat};
+use conga_core::{
+    Action, ActionList, Event, HandTerminal, Observation, Phase, RandomChance, RuleSet, Seat,
+};
 use conga_rules::{StandardConga, State};
 use rand_chacha::ChaCha8Rng;
 use rand_core::{Rng, SeedableRng};
@@ -23,6 +25,17 @@ use rand_core::{Rng, SeedableRng};
 use crate::belief::BeliefTracker;
 use crate::greedy::GreedyPlayer;
 use crate::player::Player;
+
+/// Which policy drives both seats inside a rollout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RolloutPolicy {
+    /// Deterministic greedy (D27). The default.
+    Greedy,
+    /// Uniform random over legal actions. Adds variance so action-value
+    /// averages can actually separate even when greedy would make the
+    /// same choice.
+    Random,
+}
 
 #[derive(Debug, Clone)]
 pub struct SearchPlayer {
@@ -36,6 +49,16 @@ pub struct SearchPlayer {
     samples: u32,
     /// Total rollouts executed so far. Useful for logging rollouts/sec.
     rollouts: u64,
+    /// Breakdown of rollout terminal types. Diagnostic: large stalemate
+    /// counts flatten the value signal across actions, see D33 notes.
+    stalemate_rollouts: u64,
+    own_close_rollouts: u64,
+    opp_close_rollouts: u64,
+    rollout_policy: RolloutPolicy,
+    /// Weight applied to the sum of opponents' terminal points when
+    /// scoring a rollout. `value = -points[own] + opp_weight *
+    /// sum(points[opp])`. Default 0.0 (plain own-residual).
+    opp_weight: f64,
 }
 
 impl SearchPlayer {
@@ -47,7 +70,22 @@ impl SearchPlayer {
             rng: ChaCha8Rng::seed_from_u64(seed),
             samples,
             rollouts: 0,
+            stalemate_rollouts: 0,
+            own_close_rollouts: 0,
+            opp_close_rollouts: 0,
+            rollout_policy: RolloutPolicy::Greedy,
+            opp_weight: 0.0,
         }
+    }
+
+    pub fn with_rollout_policy(mut self, policy: RolloutPolicy) -> Self {
+        self.rollout_policy = policy;
+        self
+    }
+
+    pub fn with_opponent_weight(mut self, w: f64) -> Self {
+        self.opp_weight = w;
+        self
     }
 
     pub fn samples(&self) -> u32 {
@@ -56,6 +94,18 @@ impl SearchPlayer {
 
     pub fn rollouts(&self) -> u64 {
         self.rollouts
+    }
+
+    pub fn stalemate_rollouts(&self) -> u64 {
+        self.stalemate_rollouts
+    }
+
+    pub fn own_close_rollouts(&self) -> u64 {
+        self.own_close_rollouts
+    }
+
+    pub fn opp_close_rollouts(&self) -> u64 {
+        self.opp_close_rollouts
     }
 
     fn ensure_belief(&mut self, obs: &Observation) {
@@ -69,7 +119,7 @@ impl SearchPlayer {
     }
 
     fn rollout(
-        &self,
+        &mut self,
         mut state: State,
         own_seat: Seat,
         chance: &mut RandomChance<ChaCha8Rng>,
@@ -79,7 +129,23 @@ impl SearchPlayer {
         let mut events = Vec::new();
         loop {
             if let Some(result) = self.rules.hand_result(&state) {
-                return -(result.points[own_seat.index() as usize] as f64);
+                match result.terminal {
+                    HandTerminal::Stalemate => self.stalemate_rollouts += 1,
+                    HandTerminal::Closed => match result.closer {
+                        Some(s) if s == own_seat => self.own_close_rollouts += 1,
+                        Some(_) => self.opp_close_rollouts += 1,
+                        None => {}
+                    },
+                }
+                let own_idx = own_seat.index() as usize;
+                let own_points = result.points[own_idx] as f64;
+                let opp_sum: f64 = result
+                    .points
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &p)| if i == own_idx { None } else { Some(p as f64) })
+                    .sum();
+                return -own_points + self.opp_weight * opp_sum;
             }
             legal.clear();
             self.rules.legal_actions(&state, &mut legal);
@@ -87,7 +153,13 @@ impl SearchPlayer {
                 return 0.0;
             }
             let obs = self.rules.observe(&state, state.current_seat);
-            let action = greedy.act(&obs, &legal);
+            let action = match self.rollout_policy {
+                RolloutPolicy::Greedy => greedy.act(&obs, &legal),
+                RolloutPolicy::Random => {
+                    let idx = (chance.rng.next_u32() as usize) % legal.len();
+                    legal[idx].clone()
+                }
+            };
             events.clear();
             self.rules.apply(&mut state, action, chance, &mut events);
         }
