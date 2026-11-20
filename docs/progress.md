@@ -9,8 +9,9 @@ Claude updates this file at every stop. A new session reads it first.
 - Slice 2 committed (`225159b`): `BeliefTracker` module (notify / known_held / prob_holds / sample_state).
 - Slice 3 committed (`d8ced62`): `SearchPlayer` (PIMC, shared determinization) + `BaselineAgent::Search` + `conga-cli eval/play` `--samples` and `play --ai` flags.
 - Slice 3 diagnostics committed (`6f15f7b`): rollout terminal counters + `RolloutPolicy` / `opp_weight` knobs + 2 ignored experiment tests. 281 tests pass, 7 with `--ignored`.
-- **Pivot (2026-11-20, D37):** PIMC-with-greedy-rollouts loses to greedy (4% default, 0% random rollouts, 12.5% opp_weight 0.3). Structural strategy fusion. `SearchPlayer` ships as scaffolding (beats random 100-0); standalone search deferred to m7 with the learned value model. m4 exit test becomes "rule-based v2 beats greedy" per D35.
-- Next slice: slice 4, rule-based v2 using the belief tracker. Awaiting Simone's go-ahead.
+- **Pivot (2026-11-20, D37):** PIMC-with-greedy-rollouts loses to greedy (4% default, 0% random rollouts, 12.5% opp_weight 0.3). Structural strategy fusion. `SearchPlayer` ships as scaffolding (beats random 100-0); standalone search deferred to m7 with the learned value model.
+- Slice 4 committed (`ab22b37`): rule-based v2 using BeliefTracker. Three 200-game smokes vs greedy (seeds 1, 0xC0FFEE, 0xBEEF): 35.5% / 37.0% / 34.0%. Statistically indistinguishable from D28's 36-38%. Kept as a refactor per D38 (same strength, cleaner code, single belief source of truth). An agent that actually beats greedy waits for m5+ where match-equity gives a stronger signal.
+- Next slice: slice 5, exit-test wrap-up + m5 kickoff prompt. Awaiting Simone's go-ahead.
 - Last accepted tag: `m3-accepted`
 
 ## Done
