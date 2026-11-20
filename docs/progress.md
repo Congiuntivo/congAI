@@ -7,8 +7,10 @@ Claude updates this file at every stop. A new session reads it first.
 - Milestone 4: belief tracker + search agent. Plan at `docs/plans/m4.md`. Branch `m4-belief-search` from `main` (tag `m3-accepted`).
 - Slice 1 committed (`c9b075e`): `StandardConga::sample_state` + conformance test 5.
 - Slice 2 committed (`225159b`): `BeliefTracker` module (notify / known_held / prob_holds / sample_state).
-- Slice 3 committed (`d8ced62`): `SearchPlayer` (PIMC, shared determinization) + `BaselineAgent::Search` + `conga-cli eval/play` `--samples` and `play --ai` flags. 281 tests pass, 5 with `--ignored`. Early timing: K=20 one match = 270 rollouts/sec release.
-- Next slice: slice 4, rule-based v2 using the belief tracker (conditional ship per D35). Awaiting Simone's go-ahead.
+- Slice 3 committed (`d8ced62`): `SearchPlayer` (PIMC, shared determinization) + `BaselineAgent::Search` + `conga-cli eval/play` `--samples` and `play --ai` flags.
+- Slice 3 diagnostics committed (`6f15f7b`): rollout terminal counters + `RolloutPolicy` / `opp_weight` knobs + 2 ignored experiment tests. 281 tests pass, 7 with `--ignored`.
+- **Pivot (2026-11-20, D37):** PIMC-with-greedy-rollouts loses to greedy (4% default, 0% random rollouts, 12.5% opp_weight 0.3). Structural strategy fusion. `SearchPlayer` ships as scaffolding (beats random 100-0); standalone search deferred to m7 with the learned value model. m4 exit test becomes "rule-based v2 beats greedy" per D35.
+- Next slice: slice 4, rule-based v2 using the belief tracker. Awaiting Simone's go-ahead.
 - Last accepted tag: `m3-accepted`
 
 ## Done
