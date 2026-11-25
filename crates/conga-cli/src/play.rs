@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-use conga_ai::{RandomPlayer, run_player};
+use conga_ai::{BaselineAgent, RandomPlayer, run_player};
 use conga_core::{MatchStatus, Seat};
 use conga_rules::StandardConga;
 use conga_server::{GameServer, JsonLinesWriter, MatchLogWriter, in_memory_pair};
@@ -56,6 +56,11 @@ pub struct PlayOptions {
     pub players: u8,
     pub log_path: std::path::PathBuf,
     pub theme: SuitTheme,
+    /// Opponent agent name: `random`, `greedy`, `rule-based`, `search`.
+    pub ai: String,
+    /// Belief-samples per decision for the `search` agent. Ignored by
+    /// the others.
+    pub samples: u32,
 }
 
 /// Interactive play: seat 0 is the human via `conga-tui`, seat 1 is a
@@ -101,8 +106,13 @@ pub fn run(opts: PlayOptions) -> Result<(MatchStatus, Vec<i32>), PlayError> {
         // AI seed derived from the match seed so repeated runs with the
         // same --seed reproduce the AI's actions.
         let ai_seed = opts.seed ^ 0xA1A1_A1A1_A1A1_A1A1;
+        let ai_name = opts.ai.clone();
+        let ai_samples = opts.samples;
         let ai_task = tokio::spawn(async move {
-            let player = RandomPlayer::from_seed(ai_seed);
+            let player = BaselineAgent::from_name_with_samples(&ai_name, ai_seed, ai_samples)
+                .unwrap_or_else(|| {
+                    BaselineAgent::Random(Box::new(RandomPlayer::from_seed(ai_seed)))
+                });
             run_player(player, c1).await
         });
 

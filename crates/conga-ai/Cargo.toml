@@ -9,10 +9,10 @@ publish.workspace = true
 [dependencies]
 conga-core = { path = "../conga-core" }
 conga-protocol = { path = "../conga-protocol" }
+conga-rules = { path = "../conga-rules" }
 conga-server = { path = "../conga-server" }
 rand_chacha = { workspace = true }
 rand_core = { workspace = true }
 
 [dev-dependencies]
-conga-rules = { path = "../conga-rules" }
 tokio = { workspace = true }

@@ -22,3 +22,6 @@ build/
 
 # Claude Code personal overrides
 .claude/settings.local.json
+
+# Ad-hoc eval / diagnostic logs at repo root (findings live in docs/)
+/m*-*.log

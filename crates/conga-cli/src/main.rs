@@ -25,7 +25,7 @@ enum Command {
         #[arg(long, default_value_t = 2)]
         players: u8,
     },
-    /// Play a full match in the TUI against the random agent. Writes a
+    /// Play a full match in the TUI against a baseline agent. Writes a
     /// JSON-lines log that `replay` can read back.
     Play {
         /// RNG seed for the match's shuffles and the AI's choices.
@@ -40,6 +40,13 @@ enum Command {
         /// Suit glyphs: `french` (default) uses ♣♦♥♠, `spanish` uses ✦●♡✚.
         #[arg(long, default_value = "french", value_parser = ["french", "spanish", "f", "s"])]
         suits: String,
+        /// Opponent agent: `random`, `greedy`, `rule-based` or `search`.
+        #[arg(long, default_value = "random", value_parser = ["random", "greedy", "rule-based", "search"])]
+        ai: String,
+        /// Belief-samples per decision for the `search` agent. Ignored
+        /// by the other agents.
+        #[arg(long, default_value_t = 50)]
+        samples: u32,
     },
     /// Read a JSON-lines match log and print each hand's state
     /// sequence plus the final match status.
@@ -49,11 +56,11 @@ enum Command {
     },
     /// Head-to-head evaluation of two baseline agents.
     Eval {
-        /// First agent: `random`, `greedy` or `rule-based`.
-        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based"])]
+        /// First agent: `random`, `greedy`, `rule-based` or `search`.
+        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based", "search"])]
         agent_a: String,
         /// Second agent.
-        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based"])]
+        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based", "search"])]
         agent_b: String,
         /// Number of matches to play (rounded up to the nearest even
         /// number so every chance stream is run with seats swapped).
@@ -62,6 +69,10 @@ enum Command {
         /// Base RNG seed. The agents' RNGs are derived from this.
         #[arg(long)]
         seed: u64,
+        /// Belief-samples per decision for the `search` agent. Ignored
+        /// by the other agents.
+        #[arg(long, default_value_t = 50)]
+        samples: u32,
     },
 }
 
@@ -87,6 +98,8 @@ fn main() {
             players,
             log,
             suits,
+            ai,
+            samples,
         } => {
             let theme = conga_tui::SuitTheme::parse(&suits).unwrap_or_default();
             let opts = play::PlayOptions {
@@ -94,6 +107,8 @@ fn main() {
                 players,
                 log_path: log,
                 theme,
+                ai,
+                samples,
             };
             match play::run(opts) {
                 Ok((status, scores)) => {
@@ -122,12 +137,14 @@ fn main() {
             agent_b,
             games,
             seed,
+            samples,
         } => {
             let opts = eval::EvalOptions {
                 agent_a,
                 agent_b,
                 games,
                 seed,
+                samples,
             };
             let stdout = std::io::stdout().lock();
             if let Err(e) = eval::run(opts, stdout) {

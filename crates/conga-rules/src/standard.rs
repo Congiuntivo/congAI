@@ -623,8 +623,111 @@ impl RuleSet for StandardConga {
         evaluate_hand(hand, &self.meld_params, &self.close_params, self.deck())
     }
 
-    fn sample_state(&self, _obs: &Observation, _rng: &mut dyn Rng) -> State {
-        unimplemented!("StandardConga::sample_state arrives in milestone 4 with the search")
+    fn sample_state(&self, obs: &Observation, rng: &mut dyn Rng) -> State {
+        // D34: v1 is defined only for the running phases (Draw / Discard).
+        // Showdown would need to fabricate closer, closer_hand_at_close and
+        // face_down_close from information that isn't surfaced in the
+        // observation; the search agent falls back to greedy there instead.
+        assert!(
+            matches!(obs.phase, Phase::Draw | Phase::Discard),
+            "StandardConga::sample_state only supports Draw/Discard phases (got {:?})",
+            obs.phase
+        );
+
+        let seats_count = obs.hand_sizes.len() as u8;
+        debug_assert!(
+            self.seats_range.contains(&seats_count),
+            "observation hand_sizes length {seats_count} outside allowed seat range"
+        );
+
+        // Everything the observing seat can account for.
+        let mut seen = obs.own_hand;
+        for &card in &obs.discard_history {
+            seen.insert(card);
+        }
+        for meld in &obs.melds_on_table {
+            seen = seen.union(meld.cards);
+        }
+
+        // Unseen = deck minus accounted-for. These cards populate the
+        // opponents' hands and the stock.
+        let unseen: Vec<Card> = self
+            .deck()
+            .all_cards()
+            .filter(|c| !seen.contains(*c))
+            .collect();
+
+        let opp_card_total: u32 = obs
+            .hand_sizes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &n)| {
+                if (i as u8) == obs.own_seat.index() {
+                    None
+                } else {
+                    Some(n as u32)
+                }
+            })
+            .sum();
+        debug_assert_eq!(
+            unseen.len() as u32,
+            opp_card_total + obs.stock_size as u32,
+            "unseen cards must cover every opponent hand and the stock"
+        );
+
+        // Fisher-Yates over the unseen pool so we can deal opponent hands
+        // and feed the remainder into the stock in one pass.
+        let mut pool = unseen;
+        let n = pool.len();
+        for i in (1..n).rev() {
+            let j = (rng.next_u32() as usize) % (i + 1);
+            pool.swap(i, j);
+        }
+
+        let mut hands: Vec<Hand> = vec![Hand::EMPTY; seats_count as usize];
+        hands[obs.own_seat.index() as usize] = obs.own_hand;
+
+        let mut cursor = 0usize;
+        for seat_idx in 0..seats_count as usize {
+            if seat_idx == obs.own_seat.index() as usize {
+                continue;
+            }
+            let count = obs.hand_sizes[seat_idx] as usize;
+            hands[seat_idx] = Hand::from(&pool[cursor..cursor + count]);
+            cursor += count;
+        }
+        let stock = pool[cursor..].to_vec();
+
+        // Dealer is not in the observation; pick the seat just before the
+        // current one so legal_actions on this sampled state is well-defined
+        // (mid-hand rules read current_seat, not dealer). D34.
+        let dealer = Seat::new((obs.current_seat.index() + seats_count - 1) % seats_count);
+
+        State {
+            seats_count,
+            hands,
+            stock,
+            discard_pile: obs.discard_history.clone(),
+            scores: obs.scores.clone(),
+            dealer,
+            current_seat: obs.current_seat,
+            phase: obs.phase,
+            melds_on_table: obs.melds_on_table.clone(),
+            // Mid-hand sample: by now every seat has already had its first
+            // turn in the overwhelming majority of positions. The rare
+            // first-decision-of-the-hand case overstates legality for the
+            // opponents' first turn in a rollout (they may Close); bounded
+            // error PIMC absorbs. D34.
+            first_turn_done: vec![true; seats_count as usize],
+            must_not_discard: None,
+            closer: None,
+            closer_hand_at_close: None,
+            closer_has_opened: false,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
+        }
     }
 }
 
@@ -1782,6 +1885,152 @@ mod tests {
             rules.match_status(&[200, 110, 150, 110]),
             MatchStatus::Winner(Seat::new(1))
         );
+    }
+
+    // --- sample_state (D32-D34) ---
+
+    fn rng(seed: u64) -> ChaCha8Rng {
+        ChaCha8Rng::seed_from_u64(seed)
+    }
+
+    fn mid_hand_state_two_seats() -> State {
+        // Hand-crafted mid-hand Discard state. Seat 0 holds seven cards,
+        // seat 1 holds seven cards, the discard pile holds four cards and
+        // the rest goes into the stock. Current seat is 0, about to
+        // discard.
+        let seat0: Hand = [
+            c(Suit::Clubs, 1),
+            c(Suit::Clubs, 2),
+            c(Suit::Clubs, 3),
+            c(Suit::Hearts, 7),
+            c(Suit::Hearts, 8),
+            c(Suit::Hearts, 9),
+            c(Suit::Spades, 10),
+        ]
+        .as_slice()
+        .into();
+        let seat1: Hand = [
+            c(Suit::Diamonds, 1),
+            c(Suit::Diamonds, 2),
+            c(Suit::Diamonds, 3),
+            c(Suit::Diamonds, 4),
+            c(Suit::Spades, 1),
+            c(Suit::Spades, 2),
+            c(Suit::Spades, 3),
+        ]
+        .as_slice()
+        .into();
+        let discard = vec![
+            c(Suit::Clubs, 10),
+            c(Suit::Diamonds, 10),
+            c(Suit::Hearts, 10),
+            c(Suit::Spades, 4),
+        ];
+        let seen: Hand = seat0
+            .iter()
+            .chain(seat1.iter())
+            .chain(discard.iter().copied())
+            .collect();
+        let stock: Vec<Card> = (0u8..40)
+            .filter_map(Card::from_index)
+            .filter(|card| !seen.contains(*card))
+            .collect();
+        State {
+            seats_count: 2,
+            hands: vec![seat0, seat1],
+            stock,
+            discard_pile: discard,
+            scores: vec![0, 0],
+            dealer: Seat::new(1),
+            current_seat: Seat::new(0),
+            phase: Phase::Discard,
+            melds_on_table: Vec::new(),
+            first_turn_done: vec![true, true],
+            must_not_discard: None,
+            closer: None,
+            closer_hand_at_close: None,
+            closer_has_opened: false,
+            showdown_consecutive_passes: 0,
+            face_down_close: None,
+            reshuffles_this_hand: 0,
+            stalemate_pending: false,
+        }
+    }
+
+    #[test]
+    fn sample_state_round_trips_mid_hand_observation() {
+        let rules = StandardConga::new();
+        let real = mid_hand_state_two_seats();
+        let obs = rules.observe(&real, Seat::new(0));
+        let mut r = rng(1234);
+        for _ in 0..50 {
+            let sample = rules.sample_state(&obs, &mut r);
+            let round_trip = rules.observe(&sample, Seat::new(0));
+            assert_eq!(round_trip, obs);
+        }
+    }
+
+    #[test]
+    fn sample_state_opponent_hands_have_right_size_and_disjoint_cards() {
+        let rules = StandardConga::new();
+        let real = mid_hand_state_two_seats();
+        let obs = rules.observe(&real, Seat::new(0));
+        let mut r = rng(9999);
+        let sample = rules.sample_state(&obs, &mut r);
+        assert_eq!(sample.hands[0], obs.own_hand);
+        assert_eq!(sample.hands[1].len() as u8, obs.hand_sizes[1]);
+        assert_eq!(sample.stock.len() as u8, obs.stock_size);
+        // All 40 cards still accounted for exactly once.
+        let mut seen = Hand::EMPTY;
+        for h in &sample.hands {
+            for card in h.iter() {
+                assert!(!seen.contains(card), "card {} duplicated", card);
+                seen.insert(card);
+            }
+        }
+        for &card in &sample.stock {
+            assert!(!seen.contains(card), "card {} duplicated", card);
+            seen.insert(card);
+        }
+        for &card in &sample.discard_pile {
+            assert!(!seen.contains(card), "card {} duplicated", card);
+            seen.insert(card);
+        }
+        assert_eq!(seen.len(), 40);
+    }
+
+    #[test]
+    fn sample_state_in_draw_phase_round_trips() {
+        let rules = StandardConga::new();
+        let mut real = mid_hand_state_two_seats();
+        real.phase = Phase::Draw;
+        let obs = rules.observe(&real, Seat::new(0));
+        let mut r = rng(7);
+        let sample = rules.sample_state(&obs, &mut r);
+        assert_eq!(sample.phase, Phase::Draw);
+        assert_eq!(rules.observe(&sample, Seat::new(0)), obs);
+    }
+
+    #[test]
+    #[should_panic(expected = "only supports Draw/Discard phases")]
+    fn sample_state_panics_in_showdown_phase() {
+        let rules = StandardConga::new();
+        let mut real = mid_hand_state_two_seats();
+        real.phase = Phase::Showdown;
+        let obs = rules.observe(&real, Seat::new(0));
+        let mut r = rng(0);
+        let _ = rules.sample_state(&obs, &mut r);
+    }
+
+    #[test]
+    #[should_panic(expected = "only supports Draw/Discard phases")]
+    fn sample_state_panics_in_ended_phase() {
+        let rules = StandardConga::new();
+        let mut real = mid_hand_state_two_seats();
+        real.phase = Phase::Ended;
+        let obs = rules.observe(&real, Seat::new(0));
+        let mut r = rng(0);
+        let _ = rules.sample_state(&obs, &mut r);
     }
 
     #[test]

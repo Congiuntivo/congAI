@@ -4,8 +4,14 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone: 3 accepted on 2026-11-19, tagged `m3-accepted`. Branch `m3-baselines-eval` kept for history.
-- No open slice. Awaiting Simone's go-ahead to plan m4 (belief tracker + search agent).
+- Milestone 4: belief tracker + search agent. Plan at `docs/plans/m4.md`. Branch `m4-belief-search` from `main` (tag `m3-accepted`).
+- Slice 1 committed (`c9b075e`): `StandardConga::sample_state` + conformance test 5.
+- Slice 2 committed (`225159b`): `BeliefTracker` module (notify / known_held / prob_holds / sample_state).
+- Slice 3 committed (`d8ced62`): `SearchPlayer` (PIMC, shared determinization) + `BaselineAgent::Search` + `conga-cli eval/play` `--samples` and `play --ai` flags.
+- Slice 3 diagnostics committed (`6f15f7b`): rollout terminal counters + `RolloutPolicy` / `opp_weight` knobs + 2 ignored experiment tests. 281 tests pass, 7 with `--ignored`.
+- **Pivot (2026-11-20, D37):** PIMC-with-greedy-rollouts loses to greedy (4% default, 0% random rollouts, 12.5% opp_weight 0.3). Structural strategy fusion. `SearchPlayer` ships as scaffolding (beats random 100-0); standalone search deferred to m7 with the learned value model.
+- Slice 4 committed (`ab22b37`): rule-based v2 using BeliefTracker. Three 200-game smokes vs greedy (seeds 1, 0xC0FFEE, 0xBEEF): 35.5% / 37.0% / 34.0%. Statistically indistinguishable from D28's 36-38%. Kept as a refactor per D38.
+- Slice 5 complete: all `#[ignore]`d regressions re-run green (`sample_state` 1.9s, `belief` 0.8s, `search` smoke 26.0s at 239 rollouts/sec, m3 `exit_regressions` 44.8s). m5 kickoff prompt written at `docs/prompts/05-milestone-5.md`. **Milestone 4 awaiting Simone's acceptance.**
 - Last accepted tag: `m3-accepted`
 
 ## Done
