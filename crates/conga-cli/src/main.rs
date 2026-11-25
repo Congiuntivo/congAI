@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use conga_cli::{debug_hand, eval, play, replay};
+use conga_cli::{build_equity, debug_hand, eval, play, replay};
 
 #[derive(Parser)]
 #[command(name = "conga-cli", about = "Conga engine command-line tools")]
@@ -53,6 +53,26 @@ enum Command {
     Replay {
         /// Path to a JSON-lines match log written by `play`.
         log_file: PathBuf,
+    },
+    /// Build the 2-player match equity table by greedy-vs-greedy
+    /// Monte Carlo (D40). Use `--smoke` to time 1000 matches at a
+    /// mid-range cell and get an ETA for the full run before
+    /// committing the artefact.
+    BuildEquity {
+        /// Matches simulated per cell in full mode.
+        #[arg(long, default_value_t = 100)]
+        games_per_cell: u32,
+        /// Where the resulting equity JSON lands. Ignored under
+        /// `--smoke`.
+        #[arg(long)]
+        out: PathBuf,
+        /// Base RNG seed for the simulations.
+        #[arg(long)]
+        seed: u64,
+        /// Measure matches/sec at one cell and print an ETA for the
+        /// full build; do not write any file.
+        #[arg(long, default_value_t = false)]
+        smoke: bool,
     },
     /// Head-to-head evaluation of two baseline agents.
     Eval {
@@ -130,6 +150,24 @@ fn main() {
                     eprintln!("error: {e}");
                     std::process::exit(1);
                 }
+            }
+        }
+        Command::BuildEquity {
+            games_per_cell,
+            out,
+            seed,
+            smoke,
+        } => {
+            let opts = build_equity::BuildEquityOptions {
+                games_per_cell,
+                out,
+                seed,
+                smoke,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = build_equity::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
             }
         }
         Command::Eval {

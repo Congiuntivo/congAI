@@ -4,8 +4,8 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 5 in progress on branch `m5-match-equity`. Slice 1 landed: equity-table types, placeholder artefact and loader. Slice plan at `docs/plans/m5.md`. Decisions D39–D42 logged.
-- Next slice: 2 — `conga-cli build-equity` smoke that measures matches/sec and reports estimated full-run wall clock, so Simone can approve the slice-3 compute budget before it runs.
+- Milestone 5 in progress on branch `m5-match-equity`. Slices 1 and 2 landed. Slice plan at `docs/plans/m5.md`. Decisions D39–D42 logged.
+- Slice 2 smoke on this machine (release, serial): ~23 matches/sec weighted average across the grid, 9 mps near (-50, -50), 60+ mps near elimination. Full-run estimate at N=100 ≈ 14 hours serial, N=20 ≈ 170 min, N=5 ≈ 42 min. The CLAUDE.md "no rayon unless serial too slow — bring numbers first" gate is now hit; awaiting Simone's call on N and rayon before slice 3.
 - Last accepted tag: `m4-accepted`
 
 ## Done

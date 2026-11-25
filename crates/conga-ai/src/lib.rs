@@ -21,7 +21,7 @@ pub use driver::{DriverError, run_player};
 pub use equity::{EquityTable, committed_table};
 pub use eval::{
     BaselineAgent, EvalReport, MatchOutcome, PairedResult, report_from_pairs, run_batch, run_match,
-    run_paired, wilson_ci,
+    run_match_from, run_paired, wilson_ci,
 };
 pub use greedy::GreedyPlayer;
 pub use player::Player;

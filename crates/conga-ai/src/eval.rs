@@ -71,8 +71,10 @@ impl PairedResult {
     }
 }
 
-/// Play one match head-to-head: seat 0 is driven by `a`, seat 1 by
-/// `b`. Returns a `MatchOutcome` once `match_status` reports a winner.
+/// Play one match head-to-head from the default (all-zero) starting
+/// scores: seat 0 is driven by `a`, seat 1 by `b`. Returns a
+/// `MatchOutcome` once `match_status` reports a winner. Thin wrapper
+/// over [`run_match_from`].
 pub fn run_match<R, A, B>(
     rules: &R,
     a: &mut A,
@@ -85,9 +87,27 @@ where
     A: Player,
     B: Player,
 {
+    run_match_from(rules, a, b, MatchState::new(2, starting_dealer), seed)
+}
+
+/// Play one match head-to-head starting from the given [`MatchState`]
+/// (scores, dealer, status). Used by the m5 equity-table build to
+/// sample matches that start from an arbitrary score pair. The caller
+/// is responsible for passing a state whose `status` is `InProgress`;
+/// a terminal state short-circuits to a vacuous outcome below.
+pub fn run_match_from<R, A, B>(
+    rules: &R,
+    a: &mut A,
+    b: &mut B,
+    mut match_state: MatchState,
+    seed: u64,
+) -> MatchOutcome
+where
+    R: RuleSet,
+    A: Player,
+    B: Player,
+{
     let mut chance = RandomChance::new(ChaCha8Rng::seed_from_u64(seed));
-    let seats: u8 = 2;
-    let mut match_state = MatchState::new(seats, starting_dealer);
     let mut decisions: u64 = 0;
     let mut actions_buf: Vec<Action> = Vec::new();
     let mut events_buf: Vec<Event> = Vec::new();
