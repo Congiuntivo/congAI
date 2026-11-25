@@ -4,8 +4,8 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 4 accepted on 2026-11-20, tagged `m4-accepted`. Branch `m4-belief-search` kept for history.
-- No open slice. Awaiting Simone's go-ahead to plan m5 (match equity + score-aware play; kickoff prompt at `docs/prompts/05-milestone-5.md`).
+- Milestone 5 in progress on branch `m5-match-equity`. Slice 1 landed: equity-table types, placeholder artefact and loader. Slice plan at `docs/plans/m5.md`. Decisions D39–D42 logged.
+- Next slice: 2 — `conga-cli build-equity` smoke that measures matches/sec and reports estimated full-run wall clock, so Simone can approve the slice-3 compute budget before it runs.
 - Last accepted tag: `m4-accepted`
 
 ## Done
@@ -31,4 +31,4 @@ None.
 
 ## Next
 
-- Milestone 5: match equity and score-aware play. Kickoff prompt at `docs/prompts/05-milestone-5.md`. The m5 agent is expected to be the first non-scaffolding ladder-climber — belief tracker + match equity should be enough to beat greedy without needing the m7 value model.
+- Milestone 5 in progress — see `docs/plans/m5.md`. The m5 agent is expected to be the first non-scaffolding ladder-climber: belief tracker + match equity should be enough to beat rule-based without needing the m7 value model.

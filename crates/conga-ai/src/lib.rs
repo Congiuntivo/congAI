@@ -3,10 +3,12 @@
 //! m2 shipped the `Player` trait, a `RandomPlayer` and a `run_player`
 //! driver. m3 adds the baseline agents (greedy, rule-based) and the
 //! evaluation harness. The belief tracker and search agent arrive in
-//! m4.
+//! m4. m5 adds the 2-player match equity table (D39-D42) and will
+//! layer a score-aware agent on top of it.
 
 pub mod belief;
 pub mod driver;
+pub mod equity;
 pub mod eval;
 pub mod greedy;
 pub mod player;
@@ -16,6 +18,7 @@ pub mod search;
 
 pub use belief::BeliefTracker;
 pub use driver::{DriverError, run_player};
+pub use equity::{EquityTable, committed_table};
 pub use eval::{
     BaselineAgent, EvalReport, MatchOutcome, PairedResult, report_from_pairs, run_batch, run_match,
     run_paired, wilson_ci,
