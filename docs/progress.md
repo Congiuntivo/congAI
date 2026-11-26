@@ -4,8 +4,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 5 in progress on branch `m5-match-equity`. Slices 1 and 2 landed. Slice plan at `docs/plans/m5.md`. Decisions D39–D42 logged.
-- Slice 2 smoke on this machine (release, serial): ~23 matches/sec weighted average across the grid, 9 mps near (-50, -50), 60+ mps near elimination. Full-run estimate at N=100 ≈ 14 hours serial, N=20 ≈ 170 min, N=5 ≈ 42 min. The CLAUDE.md "no rayon unless serial too slow — bring numbers first" gate is now hit; awaiting Simone's call on N and rayon before slice 3.
+- Milestone 5 in progress on branch `m5-match-equity`. Slices 1-3 landed. Slice plan at `docs/plans/m5.md`. Decisions D39-D44 logged.
+- Real equity table committed: N=50, 573 800 greedy-vs-greedy matches, 123 min wall clock with rayon on 12 cores (78 matches/sec, 3.4x over the 23 mps serial baseline). Raw Monte Carlo values; no smoothing. All 14 equity invariants green (origin, diagonal, off-diagonal mirror, elim boundaries, monotonicity).
+- Next slice: 4 — `ScoreAwarePlayer` (rule-based + equity-aware Close with belief-sampled opp residual, D41) wired through `BaselineAgent` and the `--ai` flag.
 - Last accepted tag: `m4-accepted`
 
 ## Done

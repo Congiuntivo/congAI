@@ -20,6 +20,7 @@ publish = false
 rand_core = "0.10"
 rand_chacha = "0.10"
 clap = { version = "4.6", features = ["derive"] }
+rayon = "1.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "sync", "io-util"] }

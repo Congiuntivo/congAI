@@ -216,9 +216,91 @@ mod tests {
         assert_eq!(t.min_score, MIN_SCORE);
         assert_eq!(t.max_score, MAX_SCORE);
         assert_eq!(t.values.len(), DIM * DIM);
-        // Placeholder-era invariants survive the round-trip.
-        assert!((t.lookup(0, 0) - 0.5).abs() < 1e-6);
-        assert_eq!(t.lookup(101, 0), 0.0);
-        assert_eq!(t.lookup(0, 101), 1.0);
+    }
+
+    /// The committed table is a Monte Carlo result (greedy vs greedy,
+    /// N samples per cell, see D40). Noise bounds are generous enough
+    /// to pass at N=20 and tighten at N=50+.
+    #[test]
+    fn real_origin_near_half() {
+        let t = committed_table();
+        let v = t.lookup(0, 0);
+        assert!(
+            (v - 0.5).abs() <= 0.08,
+            "committed equity at (0,0) is {v}, expected ~0.5",
+        );
+    }
+
+    #[test]
+    fn real_eliminated_boundary() {
+        let t = committed_table();
+        assert_eq!(t.lookup(101, 0), 0.0, "own eliminated must be 0");
+        assert_eq!(t.lookup(0, 101), 1.0, "opp eliminated must be 1");
+        assert!(
+            t.lookup(-50, 0) > 0.6,
+            "deep negative own score should dominate (got {})",
+            t.lookup(-50, 0)
+        );
+        assert!(
+            t.lookup(0, -50) < 0.4,
+            "deep negative opp score should lose (got {})",
+            t.lookup(0, -50)
+        );
+    }
+
+    #[test]
+    fn real_mirror_symmetry_off_diagonal() {
+        let t = committed_table();
+        // Off-diagonal mirror is baked in by the compute (slice 2
+        // writes `values[idx_ba] = 1 - values[idx_ab]`), so the
+        // invariant is exact up to the f32 rounding of (1.0 - v).
+        // Diagonal cells (a == b) are *not* mirror-pinned because
+        // mirror would double-count the single Monte Carlo estimate;
+        // they float around 0.5 within sampling noise and are covered
+        // by `real_diagonal_near_half`.
+        for (a, b) in [(-40, 60), (-10, 30), (25, 70), (90, -20), (-50, 100)] {
+            assert_ne!(a, b, "off-diagonal test used a diagonal cell");
+            let sum = t.lookup(a, b) + t.lookup(b, a);
+            assert!(
+                (sum - 1.0).abs() < 1e-6,
+                "mirror broken at ({a},{b}): {} + {} = {sum}",
+                t.lookup(a, b),
+                t.lookup(b, a),
+            );
+        }
+    }
+
+    #[test]
+    fn real_diagonal_near_half() {
+        // Equal scores → equity ≈ 0.5 by greedy-vs-greedy symmetry,
+        // modulo Monte Carlo noise at N=50 (std ≈ 0.071). Use a wide
+        // tolerance: ~2 sigma + safety margin.
+        let t = committed_table();
+        for a in [-40, -10, 0, 25, 70] {
+            let v = t.lookup(a, a);
+            assert!(
+                (v - 0.5).abs() <= 0.15,
+                "diagonal ({a},{a}) is {v}, expected ~0.5",
+            );
+        }
+    }
+
+    #[test]
+    fn real_monotone_in_own_within_noise() {
+        // Equity must not increase as own score rises (holding opp
+        // fixed). Tolerate up to `ulp` of Monte Carlo noise per step.
+        let t = committed_table();
+        let ulp = 0.15;
+        for b in [-20, 0, 40, 80] {
+            let mut prev = f32::INFINITY;
+            for a in (MIN_SCORE..=ELIMINATION_THRESHOLD).step_by(10) {
+                let v = t.lookup(a, b);
+                assert!(
+                    v <= prev + ulp,
+                    "monotonicity broken at a={a}, b={b}: {v} > {prev} + {ulp}",
+                );
+                prev = v;
+            }
+        }
     }
 }

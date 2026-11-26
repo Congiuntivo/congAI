@@ -13,6 +13,7 @@
 
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use conga_ai::equity::{DIM, ELIMINATION_THRESHOLD, EquityTable, MAX_SCORE, MIN_SCORE};
@@ -20,6 +21,7 @@ use conga_ai::{GreedyPlayer, run_match_from};
 use conga_core::Seat;
 use conga_rules::StandardConga;
 use conga_server::MatchState;
+use rayon::prelude::*;
 
 /// Seed offsets that keep each cell's trajectories independent from
 /// each other and from seed offsets used by `conga-cli eval`.
@@ -99,11 +101,13 @@ pub fn compute_cell(own: i32, opp: i32, n: u32, base_seed: u64) -> f32 {
 /// Simulate the upper triangle + diagonal (`own <= opp <= 100`), mirror
 /// into the lower triangle, and pre-fill eliminated cells. Returns the
 /// finished table alongside the number of matches actually simulated
-/// (for the progress / timing report).
-pub fn compute_table<F: FnMut(usize, usize)>(
+/// (for the progress / timing report). Cells are simulated in
+/// parallel via rayon; per-cell seeding keeps the result reproducible
+/// across scheduler runs.
+pub fn compute_table<F: Fn(usize, usize) + Send + Sync>(
     n: u32,
     base_seed: u64,
-    mut progress: F,
+    progress: F,
 ) -> (EquityTable, u64) {
     let mut values = vec![0.5f32; DIM * DIM];
 
@@ -119,24 +123,38 @@ pub fn compute_table<F: FnMut(usize, usize)>(
         }
     }
 
-    let simulated_cells = upper_triangle_cell_count();
-    let mut cells_done = 0usize;
-    let mut matches_simulated = 0u64;
+    // Collect the upper-triangle + diagonal cells into a flat list so
+    // rayon can balance them freely (cells near elimination are cheap,
+    // cells near (-50, -50) are long).
+    let mut cells: Vec<(i32, i32)> = Vec::with_capacity(upper_triangle_cell_count());
     for a in MIN_SCORE..=ELIMINATION_THRESHOLD {
         for b in a..=ELIMINATION_THRESHOLD {
+            cells.push((a, b));
+        }
+    }
+    let total_cells = cells.len();
+    let done = AtomicUsize::new(0);
+
+    let results: Vec<((i32, i32), f32)> = cells
+        .par_iter()
+        .map(|&(a, b)| {
             let v = compute_cell(a, b, n, base_seed);
-            let idx_ab = cell_index(a, b);
-            values[idx_ab] = v;
-            if a != b {
-                let idx_ba = cell_index(b, a);
-                values[idx_ba] = 1.0 - v;
-            }
-            matches_simulated += n as u64;
-            cells_done += 1;
-            progress(cells_done, simulated_cells);
+            let now = done.fetch_add(1, Ordering::Relaxed) + 1;
+            progress(now, total_cells);
+            ((a, b), v)
+        })
+        .collect();
+
+    for ((a, b), v) in results {
+        let idx_ab = cell_index(a, b);
+        values[idx_ab] = v;
+        if a != b {
+            let idx_ba = cell_index(b, a);
+            values[idx_ba] = 1.0 - v;
         }
     }
 
+    let matches_simulated = (total_cells as u64) * (n as u64);
     let table = EquityTable {
         min_score: MIN_SCORE,
         max_score: MAX_SCORE,
@@ -222,20 +240,18 @@ fn run_full<W: Write>(opts: BuildEquityOptions, out: &mut W) -> Result<(), Build
     )?;
     let start = Instant::now();
     let total_cells = upper_triangle_cell_count();
-    let mut last_report = 0usize;
     let report_every = (total_cells / 20).max(1);
-    let (table, matches) = compute_table(opts.games_per_cell, opts.seed, |done, total| {
-        if done - last_report >= report_every || done == total {
-            last_report = done;
+    // Rayon calls this from many threads; each cell's `done` is unique
+    // (from an AtomicUsize fetch_add inside compute_table), so the
+    // modulo check fires exactly once per milestone.
+    let (table, matches) = compute_table(opts.games_per_cell, opts.seed, move |done, total| {
+        if done % report_every == 0 || done == total {
             let elapsed = start.elapsed().as_secs_f64();
             let eta = if done > 0 {
                 elapsed * (total - done) as f64 / done as f64
             } else {
                 0.0
             };
-            // Progress goes to stderr so the stdout is just the status
-            // report at the end. Uses a plain println so it works when
-            // `out` is a buffer.
             eprintln!(
                 "  {done}/{total} cells  ({:.1}%)  elapsed={:.1}s  eta={:.1}s",
                 done as f64 * 100.0 / total as f64,
