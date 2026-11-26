@@ -17,6 +17,7 @@ use crate::greedy::GreedyPlayer;
 use crate::player::Player;
 use crate::random::RandomPlayer;
 use crate::rule_based::RuleBasedPlayer;
+use crate::score_aware::{DEFAULT_SCORE_AWARE_SAMPLES, ScoreAwarePlayer};
 use crate::search::SearchPlayer;
 
 /// Final state of one head-to-head match.
@@ -220,6 +221,7 @@ pub enum BaselineAgent {
     Greedy(GreedyPlayer),
     RuleBased(RuleBasedPlayer),
     Search(Box<SearchPlayer>),
+    ScoreAware(Box<ScoreAwarePlayer>),
 }
 
 /// Default number of belief-sampled worlds the search expands per act
@@ -228,7 +230,7 @@ pub enum BaselineAgent {
 pub const DEFAULT_SEARCH_SAMPLES: u32 = 50;
 
 impl BaselineAgent {
-    /// `name` is one of `random`, `greedy`, `rule-based`, `search`.
+    /// `name` is one of `random`, `greedy`, `rule-based`, `search`, `score-aware`.
     /// `seed` drives the random agent's RNG and the search agent's
     /// belief sampling + rollout RNG. The search agent uses
     /// [`DEFAULT_SEARCH_SAMPLES`]; for a custom count see
@@ -247,12 +249,27 @@ impl BaselineAgent {
             "search" => Some(BaselineAgent::Search(Box::new(SearchPlayer::new(
                 samples, seed,
             )))),
+            "score-aware" => {
+                // The `samples` CLI flag doubles up: for `search` it's
+                // the rollout count, for `score-aware` it's the Close-
+                // gate belief samples. Use its value if it's not the
+                // search default; otherwise use the score-aware
+                // default so the common case stays sane.
+                let k = if samples == DEFAULT_SEARCH_SAMPLES {
+                    DEFAULT_SCORE_AWARE_SAMPLES
+                } else {
+                    samples
+                };
+                Some(BaselineAgent::ScoreAware(Box::new(ScoreAwarePlayer::new(
+                    k, seed,
+                ))))
+            }
             _ => None,
         }
     }
 
     pub fn names() -> &'static [&'static str] {
-        &["random", "greedy", "rule-based", "search"]
+        &["random", "greedy", "rule-based", "search", "score-aware"]
     }
 }
 
@@ -263,6 +280,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Greedy(p) => p.act(obs, legal),
             BaselineAgent::RuleBased(p) => p.act(obs, legal),
             BaselineAgent::Search(p) => p.act(obs, legal),
+            BaselineAgent::ScoreAware(p) => p.act(obs, legal),
         }
     }
 
@@ -272,6 +290,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Greedy(p) => p.notify(event),
             BaselineAgent::RuleBased(p) => p.notify(event),
             BaselineAgent::Search(p) => p.notify(event),
+            BaselineAgent::ScoreAware(p) => p.notify(event),
         }
     }
 }

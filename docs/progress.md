@@ -4,9 +4,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 5 in progress on branch `m5-match-equity`. Slices 1-3 landed. Slice plan at `docs/plans/m5.md`. Decisions D39-D44 logged.
-- Real equity table committed: N=50, 573 800 greedy-vs-greedy matches, 123 min wall clock with rayon on 12 cores (78 matches/sec, 3.4x over the 23 mps serial baseline). Raw Monte Carlo values; no smoothing. All 14 equity invariants green (origin, diagonal, off-diagonal mirror, elim boundaries, monotonicity).
-- Next slice: 4 — `ScoreAwarePlayer` (rule-based + equity-aware Close with belief-sampled opp residual, D41) wired through `BaselineAgent` and the `--ai` flag.
+- Milestone 5 in progress on branch `m5-match-equity`. Slices 1-4 landed. Slice plan at `docs/plans/m5.md`. Decisions D39-D45 logged.
+- `ScoreAwarePlayer` ships via `BaselineAgent::ScoreAware` and `--ai score-aware`. Slice 4 pivoted from "equity-gated close" (no-op under table noise) to "pick the best close-card across shared belief samples, decline only if even the best is worse than status-quo" (D45). Smoke evals: 57.0% vs rule-based at 500 games seed 0x1 (Wilson LB 52.6%); 56.7% at 300 games seed 0xC0FFEE (Wilson LB 51.0%). Edge is primarily from picking close-cards that give a clean-split -10 bonus.
+- Next slice: 5 — `#[ignore]`d exit regression `score_aware_beats_rule_based` at 1000 paired deals, milestone-5 wrap, m6 kickoff prompt.
 - Last accepted tag: `m4-accepted`
 
 ## Done

@@ -14,6 +14,7 @@ pub mod greedy;
 pub mod player;
 pub mod random;
 pub mod rule_based;
+pub mod score_aware;
 pub mod search;
 
 pub use belief::BeliefTracker;
@@ -27,4 +28,5 @@ pub use greedy::GreedyPlayer;
 pub use player::Player;
 pub use random::RandomPlayer;
 pub use rule_based::RuleBasedPlayer;
+pub use score_aware::{DEFAULT_SCORE_AWARE_SAMPLES, ScoreAwarePlayer};
 pub use search::{RolloutPolicy, SearchPlayer};

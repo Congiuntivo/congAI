@@ -40,8 +40,8 @@ enum Command {
         /// Suit glyphs: `french` (default) uses ♣♦♥♠, `spanish` uses ✦●♡✚.
         #[arg(long, default_value = "french", value_parser = ["french", "spanish", "f", "s"])]
         suits: String,
-        /// Opponent agent: `random`, `greedy`, `rule-based` or `search`.
-        #[arg(long, default_value = "random", value_parser = ["random", "greedy", "rule-based", "search"])]
+        /// Opponent agent: `random`, `greedy`, `rule-based`, `search` or `score-aware`.
+        #[arg(long, default_value = "random", value_parser = ["random", "greedy", "rule-based", "search", "score-aware"])]
         ai: String,
         /// Belief-samples per decision for the `search` agent. Ignored
         /// by the other agents.
@@ -76,11 +76,11 @@ enum Command {
     },
     /// Head-to-head evaluation of two baseline agents.
     Eval {
-        /// First agent: `random`, `greedy`, `rule-based` or `search`.
-        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based", "search"])]
+        /// First agent: `random`, `greedy`, `rule-based`, `search` or `score-aware`.
+        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based", "search", "score-aware"])]
         agent_a: String,
         /// Second agent.
-        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based", "search"])]
+        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based", "search", "score-aware"])]
         agent_b: String,
         /// Number of matches to play (rounded up to the nearest even
         /// number so every chance stream is run with seats swapped).
