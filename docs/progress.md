@@ -4,9 +4,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 5 in progress on branch `m5-match-equity`. Slices 1-4 landed. Slice plan at `docs/plans/m5.md`. Decisions D39-D45 logged.
-- `ScoreAwarePlayer` ships via `BaselineAgent::ScoreAware` and `--ai score-aware`. Slice 4 pivoted from "equity-gated close" (no-op under table noise) to "pick the best close-card across shared belief samples, decline only if even the best is worse than status-quo" (D45). Smoke evals: 57.0% vs rule-based at 500 games seed 0x1 (Wilson LB 52.6%); 56.7% at 300 games seed 0xC0FFEE (Wilson LB 51.0%). Edge is primarily from picking close-cards that give a clean-split -10 bonus.
-- Next slice: 5 — `#[ignore]`d exit regression `score_aware_beats_rule_based` at 1000 paired deals, milestone-5 wrap, m6 kickoff prompt.
+- Milestone 5 implementation complete on branch `m5-match-equity`. All 5 slices landed; awaiting Simone's acceptance.
+- m5 exit regression (`score_aware_beats_rule_based`, 2000 paired matches, seed 0x1): PASSES at 57.90% (1158/2000), Wilson 95% CI [55.72%, 60.05%]. Mean final score 85.4 vs 90.6 (lower = winning). 268 s release wall clock.
+- m6 kickoff prompt at `docs/prompts/06-milestone-6.md` (explanation tools + validation loop).
 - Last accepted tag: `m4-accepted`
 
 ## Done
@@ -32,4 +32,4 @@ None.
 
 ## Next
 
-- Milestone 5 in progress — see `docs/plans/m5.md`. The m5 agent is expected to be the first non-scaffolding ladder-climber: belief tracker + match equity should be enough to beat rule-based without needing the m7 value model.
+- Milestone 6: explanation tools and the validation loop — see `docs/prompts/06-milestone-6.md`. The m5 agent is the first non-scaffolding ladder-climber (beats rule-based ~7 pp from equity-aware close-card selection, D45); m6 extracts the *tactic* behind that edge (or disagrees with it on new seeds) via disagreement mining and counterfactual probes. The first design-doc "Explainability" question falls out naturally.
