@@ -4,8 +4,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 4 accepted on 2026-11-20, tagged `m4-accepted`. Branch `m4-belief-search` kept for history.
-- No open slice. Awaiting Simone's go-ahead to plan m5 (match equity + score-aware play; kickoff prompt at `docs/prompts/05-milestone-5.md`).
+- Milestone 5 implementation complete on branch `m5-match-equity`. All 5 slices landed; awaiting Simone's acceptance.
+- m5 exit regression (`score_aware_beats_rule_based`, 2000 paired matches, seed 0x1): PASSES at 57.90% (1158/2000), Wilson 95% CI [55.72%, 60.05%]. Mean final score 85.4 vs 90.6 (lower = winning). 268 s release wall clock.
+- m6 kickoff prompt at `docs/prompts/06-milestone-6.md` (explanation tools + validation loop).
 - Last accepted tag: `m4-accepted`
 
 ## Done
@@ -31,4 +32,4 @@ None.
 
 ## Next
 
-- Milestone 5: match equity and score-aware play. Kickoff prompt at `docs/prompts/05-milestone-5.md`. The m5 agent is expected to be the first non-scaffolding ladder-climber — belief tracker + match equity should be enough to beat greedy without needing the m7 value model.
+- Milestone 6: explanation tools and the validation loop — see `docs/prompts/06-milestone-6.md`. The m5 agent is the first non-scaffolding ladder-climber (beats rule-based ~7 pp from equity-aware close-card selection, D45); m6 extracts the *tactic* behind that edge (or disagrees with it on new seeds) via disagreement mining and counterfactual probes. The first design-doc "Explainability" question falls out naturally.

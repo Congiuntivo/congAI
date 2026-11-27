@@ -13,6 +13,8 @@ conga-rules = { path = "../conga-rules" }
 conga-server = { path = "../conga-server" }
 rand_chacha = { workspace = true }
 rand_core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

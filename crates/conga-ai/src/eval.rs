@@ -17,6 +17,7 @@ use crate::greedy::GreedyPlayer;
 use crate::player::Player;
 use crate::random::RandomPlayer;
 use crate::rule_based::RuleBasedPlayer;
+use crate::score_aware::{DEFAULT_SCORE_AWARE_SAMPLES, ScoreAwarePlayer};
 use crate::search::SearchPlayer;
 
 /// Final state of one head-to-head match.
@@ -71,8 +72,10 @@ impl PairedResult {
     }
 }
 
-/// Play one match head-to-head: seat 0 is driven by `a`, seat 1 by
-/// `b`. Returns a `MatchOutcome` once `match_status` reports a winner.
+/// Play one match head-to-head from the default (all-zero) starting
+/// scores: seat 0 is driven by `a`, seat 1 by `b`. Returns a
+/// `MatchOutcome` once `match_status` reports a winner. Thin wrapper
+/// over [`run_match_from`].
 pub fn run_match<R, A, B>(
     rules: &R,
     a: &mut A,
@@ -85,9 +88,27 @@ where
     A: Player,
     B: Player,
 {
+    run_match_from(rules, a, b, MatchState::new(2, starting_dealer), seed)
+}
+
+/// Play one match head-to-head starting from the given [`MatchState`]
+/// (scores, dealer, status). Used by the m5 equity-table build to
+/// sample matches that start from an arbitrary score pair. The caller
+/// is responsible for passing a state whose `status` is `InProgress`;
+/// a terminal state short-circuits to a vacuous outcome below.
+pub fn run_match_from<R, A, B>(
+    rules: &R,
+    a: &mut A,
+    b: &mut B,
+    mut match_state: MatchState,
+    seed: u64,
+) -> MatchOutcome
+where
+    R: RuleSet,
+    A: Player,
+    B: Player,
+{
     let mut chance = RandomChance::new(ChaCha8Rng::seed_from_u64(seed));
-    let seats: u8 = 2;
-    let mut match_state = MatchState::new(seats, starting_dealer);
     let mut decisions: u64 = 0;
     let mut actions_buf: Vec<Action> = Vec::new();
     let mut events_buf: Vec<Event> = Vec::new();
@@ -200,6 +221,7 @@ pub enum BaselineAgent {
     Greedy(GreedyPlayer),
     RuleBased(RuleBasedPlayer),
     Search(Box<SearchPlayer>),
+    ScoreAware(Box<ScoreAwarePlayer>),
 }
 
 /// Default number of belief-sampled worlds the search expands per act
@@ -208,7 +230,7 @@ pub enum BaselineAgent {
 pub const DEFAULT_SEARCH_SAMPLES: u32 = 50;
 
 impl BaselineAgent {
-    /// `name` is one of `random`, `greedy`, `rule-based`, `search`.
+    /// `name` is one of `random`, `greedy`, `rule-based`, `search`, `score-aware`.
     /// `seed` drives the random agent's RNG and the search agent's
     /// belief sampling + rollout RNG. The search agent uses
     /// [`DEFAULT_SEARCH_SAMPLES`]; for a custom count see
@@ -227,12 +249,27 @@ impl BaselineAgent {
             "search" => Some(BaselineAgent::Search(Box::new(SearchPlayer::new(
                 samples, seed,
             )))),
+            "score-aware" => {
+                // The `samples` CLI flag doubles up: for `search` it's
+                // the rollout count, for `score-aware` it's the Close-
+                // gate belief samples. Use its value if it's not the
+                // search default; otherwise use the score-aware
+                // default so the common case stays sane.
+                let k = if samples == DEFAULT_SEARCH_SAMPLES {
+                    DEFAULT_SCORE_AWARE_SAMPLES
+                } else {
+                    samples
+                };
+                Some(BaselineAgent::ScoreAware(Box::new(ScoreAwarePlayer::new(
+                    k, seed,
+                ))))
+            }
             _ => None,
         }
     }
 
     pub fn names() -> &'static [&'static str] {
-        &["random", "greedy", "rule-based", "search"]
+        &["random", "greedy", "rule-based", "search", "score-aware"]
     }
 }
 
@@ -243,6 +280,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Greedy(p) => p.act(obs, legal),
             BaselineAgent::RuleBased(p) => p.act(obs, legal),
             BaselineAgent::Search(p) => p.act(obs, legal),
+            BaselineAgent::ScoreAware(p) => p.act(obs, legal),
         }
     }
 
@@ -252,6 +290,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Greedy(p) => p.notify(event),
             BaselineAgent::RuleBased(p) => p.notify(event),
             BaselineAgent::Search(p) => p.notify(event),
+            BaselineAgent::ScoreAware(p) => p.notify(event),
         }
     }
 }

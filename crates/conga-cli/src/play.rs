@@ -56,10 +56,10 @@ pub struct PlayOptions {
     pub players: u8,
     pub log_path: std::path::PathBuf,
     pub theme: SuitTheme,
-    /// Opponent agent name: `random`, `greedy`, `rule-based`, `search`.
+    /// Opponent agent name: `random`, `greedy`, `rule-based`, `search`, `score-aware`.
     pub ai: String,
-    /// Belief-samples per decision for the `search` agent. Ignored by
-    /// the others.
+    /// Belief-samples per decision for the `search` and `score-aware`
+    /// agents. Ignored by the others.
     pub samples: u32,
 }
 
