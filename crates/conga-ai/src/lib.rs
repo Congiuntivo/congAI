@@ -10,6 +10,7 @@ pub mod belief;
 pub mod driver;
 pub mod equity;
 pub mod eval;
+pub mod features;
 pub mod greedy;
 pub mod player;
 pub mod random;
@@ -24,6 +25,7 @@ pub use eval::{
     BaselineAgent, EvalReport, MatchOutcome, PairedResult, report_from_pairs, run_batch, run_match,
     run_match_from, run_paired, wilson_ci,
 };
+pub use features::{Features, extract as extract_features};
 pub use greedy::GreedyPlayer;
 pub use player::Player;
 pub use random::RandomPlayer;
