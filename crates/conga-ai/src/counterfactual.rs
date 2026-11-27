@@ -20,9 +20,8 @@
 use std::io;
 
 use conga_core::{
-    Action, Card, Event, Observation, Phase, RandomChance, RuleSet, Seat, best_meld_split,
+    Action, Event, MeldParams, Observation, Phase, RandomChance, RuleSet, Seat, best_meld_split,
 };
-use conga_core::{Hand, MeldParams};
 use conga_rules::StandardConga;
 use conga_server::MatchState;
 use rand_chacha::ChaCha8Rng;
@@ -30,6 +29,7 @@ use rand_core::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use crate::belief::BeliefTracker;
+use crate::close_helpers::own_close_delta;
 use crate::disagreement::action_label;
 use crate::equity::{EquityTable, committed_table};
 use crate::player::Player;
@@ -346,33 +346,6 @@ fn equity_for_action(
         }
         _ => table.lookup(own_score, opp_score),
     }
-}
-
-fn own_close_delta(hand_after_close: Hand) -> i32 {
-    let meld = MeldParams::standard();
-    let split = best_meld_split(hand_after_close, &meld);
-    let base = split.unmatched_total as i32;
-    if is_conga(hand_after_close) {
-        base - 50
-    } else if split.unmatched.is_empty() {
-        base - 10
-    } else {
-        base
-    }
-}
-
-fn is_conga(hand: Hand) -> bool {
-    if hand.len() != 7 {
-        return false;
-    }
-    let cards: Vec<Card> = hand.iter().collect();
-    let suit = cards[0].suit();
-    if !cards.iter().all(|c| c.suit() == suit) {
-        return false;
-    }
-    let mut ranks: Vec<u8> = cards.iter().map(|c| c.rank().as_u8()).collect();
-    ranks.sort_unstable();
-    ranks.windows(2).all(|w| w[1] == w[0] + 1)
 }
 
 /// Write a [`CounterfactualSweep`] to `w` as pretty-printed JSON.

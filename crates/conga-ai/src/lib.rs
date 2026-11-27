@@ -7,6 +7,8 @@
 //! layer a score-aware agent on top of it.
 
 pub mod belief;
+pub mod candidates;
+pub mod close_helpers;
 pub mod counterfactual;
 pub mod disagreement;
 pub mod driver;
@@ -19,8 +21,10 @@ pub mod random;
 pub mod rule_based;
 pub mod score_aware;
 pub mod search;
+pub mod validation;
 
 pub use belief::BeliefTracker;
+pub use candidates::{CleanSplitCloseWrapper, DEFAULT_CLEAN_SPLIT_SAMPLES};
 pub use counterfactual::{
     CounterfactualRow, CounterfactualSweep, ProbeTarget, probe_position, sweep as sweep_probes,
     write_json as write_counterfactual_json,
@@ -41,3 +45,4 @@ pub use random::RandomPlayer;
 pub use rule_based::RuleBasedPlayer;
 pub use score_aware::{DEFAULT_SCORE_AWARE_SAMPLES, ScoreAwarePlayer};
 pub use search::{RolloutPolicy, SearchPlayer};
+pub use validation::{DEFAULT_PAIRS_PER_GATE, ValidationReport, validate_tactic};
