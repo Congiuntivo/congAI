@@ -6,8 +6,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 - Milestone 6 in progress on branch `m6-explanations` (from `main` at `m5-accepted`).
 - Plan saved to `docs/plans/m6.md`. Decisions D46-D49 logged in `docs/decisions.md`.
-- Slice 1 (features module, D48) committed at `fa99503`. 317 tests pass (+6 for the new `conga-ai::features` module). fmt clean, clippy 0 warnings.
-- Awaiting Simone's go-ahead to start slice 2 (disagreement mining + committed CSV diagnostic).
+- Slice 1 (features module, D48) committed at `fa99503`.
+- Slice 2 (disagreement mining + diagnostic, D46) committed at `d8c13b7`. 321 tests pass (+4 for disagreement). Committed artefact `crates/conga-ai/diagnostics/m6_disagreements.csv` has 248 rows from 50 seeds (release build, 4.8s). As expected per D45, disagreements are overwhelmingly on Close decisions (close-card selection) with a small tail where score-aware's equity gate declines to close.
+- Awaiting Simone's go-ahead to start slice 3 (counterfactual probes + committed JSON sweep).
 - Last accepted tag: `m5-accepted`
 
 ## Done
