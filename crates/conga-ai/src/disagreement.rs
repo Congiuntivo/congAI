@@ -37,6 +37,10 @@ use crate::score_aware::{DEFAULT_SCORE_AWARE_SAMPLES, ScoreAwarePlayer};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DisagreementRow {
     pub seed: u64,
+    /// Zero-based hand index within the match. `turn` resets per hand,
+    /// so `(seed, hand, turn, current_seat, phase)` is the unique key
+    /// slice-3 reconstruction replays back to.
+    pub hand: u32,
     pub turn: u32,
     pub current_seat: u8,
     pub phase: Phase,
@@ -82,6 +86,7 @@ pub fn mine_with_samples(
         let mut chance = RandomChance::new(ChaCha8Rng::seed_from_u64(seed));
         let mut match_state = MatchState::new(2, Seat::new(0));
         let mut collected_this_seed = 0usize;
+        let mut hand_idx: u32 = 0;
 
         'match_loop: while !match_state.is_finished() {
             let mut state = rules.new_hand(&match_state.scores, match_state.dealer, &mut chance);
@@ -98,6 +103,7 @@ pub fn mine_with_samples(
                         b.notify(&evt);
                     }
                     match_state.finish_hand(&rules, &result);
+                    hand_idx += 1;
                     break;
                 }
 
@@ -134,6 +140,7 @@ pub fn mine_with_samples(
                         );
                         out.push(DisagreementRow {
                             seed,
+                            hand: hand_idx,
                             turn: obs.discard_history.len() as u32,
                             current_seat: current.index(),
                             phase: obs.phase,
@@ -246,6 +253,7 @@ fn is_conga(hand: Hand) -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct CsvRow {
     seed: u64,
+    hand: u32,
     turn: u32,
     current_seat: u8,
     phase: String,
@@ -269,6 +277,7 @@ impl From<&DisagreementRow> for CsvRow {
     fn from(r: &DisagreementRow) -> Self {
         CsvRow {
             seed: r.seed,
+            hand: r.hand,
             turn: r.turn,
             current_seat: r.current_seat,
             phase: phase_str(r.phase).to_string(),
@@ -319,6 +328,7 @@ pub fn read_csv_rows<R: std::io::Read>(r: R) -> io::Result<Vec<CsvRecord>> {
         let row = res.map_err(|e| io::Error::other(e.to_string()))?;
         out.push(CsvRecord {
             seed: row.seed,
+            hand: row.hand,
             turn: row.turn,
             current_seat: row.current_seat,
             phase: row.phase,
@@ -337,6 +347,7 @@ pub fn read_csv_rows<R: std::io::Read>(r: R) -> io::Result<Vec<CsvRecord>> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CsvRecord {
     pub seed: u64,
+    pub hand: u32,
     pub turn: u32,
     pub current_seat: u8,
     pub phase: String,
@@ -401,7 +412,7 @@ mod tests {
         let text = String::from_utf8(buf).unwrap();
         let mut lines = text.lines();
         let header = lines.next().expect("header line");
-        assert!(header.starts_with("seed,turn,current_seat,phase,"));
+        assert!(header.starts_with("seed,hand,turn,current_seat,phase,"));
         assert!(header.ends_with(",equity_at_rule_based_action"));
         let data_lines: Vec<&str> = lines.collect();
         assert_eq!(data_lines.len(), rows.len());

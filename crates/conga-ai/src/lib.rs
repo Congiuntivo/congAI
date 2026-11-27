@@ -7,6 +7,7 @@
 //! layer a score-aware agent on top of it.
 
 pub mod belief;
+pub mod counterfactual;
 pub mod disagreement;
 pub mod driver;
 pub mod equity;
@@ -20,6 +21,10 @@ pub mod score_aware;
 pub mod search;
 
 pub use belief::BeliefTracker;
+pub use counterfactual::{
+    CounterfactualRow, CounterfactualSweep, ProbeTarget, probe_position, sweep as sweep_probes,
+    write_json as write_counterfactual_json,
+};
 pub use disagreement::{
     CsvRecord, DisagreementRow, action_label, mine_disagreements, read_csv_rows, write_csv,
 };

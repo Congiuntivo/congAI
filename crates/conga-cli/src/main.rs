@@ -3,7 +3,9 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use conga_cli::{build_equity, debug_hand, eval, mine_disagreements, play, replay};
+use conga_cli::{
+    build_equity, counterfactual_sweep, debug_hand, eval, mine_disagreements, play, replay,
+};
 
 #[derive(Parser)]
 #[command(name = "conga-cli", about = "Conga engine command-line tools")]
@@ -73,6 +75,25 @@ enum Command {
         /// full build; do not write any file.
         #[arg(long, default_value_t = false)]
         smoke: bool,
+    },
+    /// Probe each position in a disagreements CSV for counterfactual
+    /// sensitivity (score ±5/±10 on both sides, close-card swaps).
+    /// Writes the aggregated sweep as JSON (D46).
+    CounterfactualSweep {
+        /// Disagreements CSV produced by `mine-disagreements`.
+        #[arg(long)]
+        from: PathBuf,
+        /// Number of positions to probe (reads the top-N rows of the
+        /// CSV).
+        #[arg(long, default_value_t = 10)]
+        n: u32,
+        /// Belief-samples per equity lookup. Matches the score-aware
+        /// agent's default (20).
+        #[arg(long, default_value_t = 20)]
+        samples: u32,
+        /// Where to write the sweep JSON.
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Mine positions where `score-aware` and `rule-based` disagree
     /// (D46). Writes a CSV to `--out`.
@@ -180,6 +201,24 @@ fn main() {
             };
             let stdout = std::io::stdout().lock();
             if let Err(e) = build_equity::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Command::CounterfactualSweep {
+            from,
+            n,
+            samples,
+            out,
+        } => {
+            let opts = counterfactual_sweep::SweepOptions {
+                from,
+                n,
+                samples,
+                out,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = counterfactual_sweep::run(opts, stdout) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
