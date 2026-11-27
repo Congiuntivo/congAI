@@ -10,8 +10,9 @@ Claude updates this file at every stop. A new session reads it first.
 - Slice 2 (disagreement mining + diagnostic, D46) committed at `d8c13b7`. Committed artefact `crates/conga-ai/diagnostics/m6_disagreements.csv` has 248 rows from 50 seeds. As expected per D45, disagreements are overwhelmingly on Close decisions (close-card selection) with a small tail where score-aware's equity gate declines to close.
 - Slice 2 follow-up: `csv` crate added to the workspace at Simone's request (`52ffe94`). Disagreement writer uses `csv::Writer`; `read_csv_rows` yields a flat `CsvRecord` for slice-3 replay.
 - Slice 3 (counterfactual probes + diagnostic, D46) committed at `4715faa`. Committed artefact `crates/conga-ai/diagnostics/m6_counterfactuals.json` has 92 rows across the top 10 mined positions. DisagreementRow gained a `hand` column so (seed, hand, turn, seat, phase) is the unique replay key.
-- Slice 4 (validation harness + clean-split candidate, D47 + D49) committed at `c0f66db`. 339 tests pass (+11 across close_helpers, candidates, validation). `CleanSplitCloseWrapper<P>` wraps any inner player and overrides Close picks via shared belief samples + equity lookup. `validate_tactic` runs vs-unchanged and vs-strong gates on the same seeds.
-- Awaiting Simone's go-ahead to start slice 5 (run the loop end-to-end + `#[ignore]`d exit regression + milestone wrap).
+- Slice 4 (validation harness + clean-split candidate, D47 + D49) committed at `c0f66db`.
+- Slice 5 (validation loop end-to-end + exit regression + promotion, D50) committed at `817bda9`. Candidate passed the loop: 573/1000 vs rule-based (seed 0x0), Wilson 95% [0.5421, 0.6033], LB > 0.5. Vs score-aware (informational): 511/1000, CI straddles 0.5 — the close-card picker captures essentially the full score-aware edge over rule-based. Promoted to `BaselineAgent::CleanSplitClose` + `--ai clean-split-close`. `#[ignore]`d regression `clean_split_close_beats_rule_based` added (seed 0x1, 125.8 s release). 339 tests pass.
+- m6 exit test satisfied. Awaiting Simone's acceptance to merge `m6-explanations` into `main` and tag `m6-accepted`.
 - Last accepted tag: `m5-accepted`
 
 ## Done
