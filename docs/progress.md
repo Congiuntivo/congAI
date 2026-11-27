@@ -4,8 +4,10 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 5 accepted on 2026-11-27, tagged `m5-accepted`. Branch `m5-match-equity` kept for history.
-- No open slice. Awaiting Simone's go-ahead to plan m6 (explanation tools + validation loop; kickoff prompt at `docs/prompts/06-milestone-6.md`).
+- Milestone 6 in progress on branch `m6-explanations` (from `main` at `m5-accepted`).
+- Plan saved to `docs/plans/m6.md`. Decisions D46-D49 logged in `docs/decisions.md`.
+- Slice 1 (features module, D48) committed at `fa99503`. 317 tests pass (+6 for the new `conga-ai::features` module). fmt clean, clippy 0 warnings.
+- Awaiting Simone's go-ahead to start slice 2 (disagreement mining + committed CSV diagnostic).
 - Last accepted tag: `m5-accepted`
 
 ## Done
