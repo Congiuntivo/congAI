@@ -20,7 +20,9 @@ pub mod score_aware;
 pub mod search;
 
 pub use belief::BeliefTracker;
-pub use disagreement::{DisagreementRow, action_label, mine_disagreements, write_csv};
+pub use disagreement::{
+    CsvRecord, DisagreementRow, action_label, mine_disagreements, read_csv_rows, write_csv,
+};
 pub use driver::{DriverError, run_player};
 pub use equity::{EquityTable, committed_table};
 pub use eval::{

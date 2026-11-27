@@ -240,45 +240,110 @@ fn is_conga(hand: Hand) -> bool {
     ranks.windows(2).all(|w| w[1] == w[0] + 1)
 }
 
-/// Write the rows as a CSV with a stable header line. Actions are
-/// rendered as display strings so the CSV opens in a spreadsheet
-/// without further post-processing; the structured `DisagreementRow`
-/// is still available programmatically.
-pub fn write_csv<W: Write>(rows: &[DisagreementRow], w: &mut W) -> io::Result<()> {
-    writeln!(
-        w,
-        "seed,turn,current_seat,phase,unmatched_total,unmatched_count,meld_count,can_close,close_improver_count,own_distance_to_elim,opp_distance_to_elim,top_discard,turn_number,known_opp_cards_count,score_aware_action,rule_based_action,equity_at_score_aware_action,equity_at_rule_based_action"
-    )?;
-    for r in rows {
-        let top = r
-            .features
-            .top_discard
-            .map(|c| c.to_string())
-            .unwrap_or_default();
-        writeln!(
-            w,
-            "{seed},{turn},{seat},{phase},{ut},{uc},{mc},{cc},{ci},{ode},{oe},{td},{tn},{kc},{sa},{rb},{eq_sa},{eq_rb}",
-            seed = r.seed,
-            turn = r.turn,
-            seat = r.current_seat,
-            phase = phase_str(r.phase),
-            ut = r.features.unmatched_total,
-            uc = r.features.unmatched_count,
-            mc = r.features.meld_count,
-            cc = r.features.can_close,
-            ci = r.features.close_improver_count,
-            ode = r.features.own_distance_to_elim,
-            oe = r.features.opp_distance_to_elim,
-            td = top,
-            tn = r.features.turn_number,
-            kc = r.features.known_opp_cards_count,
-            sa = action_label(&r.score_aware_action),
-            rb = action_label(&r.rule_based_action),
-            eq_sa = r.equity_at_score_aware_action,
-            eq_rb = r.equity_at_rule_based_action,
-        )?;
+/// Flat row shape used for CSV read/write. The nested `Features`
+/// struct is lifted so every column is a primitive or a plain string;
+/// `Action` columns are rendered via [`action_label`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct CsvRow {
+    seed: u64,
+    turn: u32,
+    current_seat: u8,
+    phase: String,
+    unmatched_total: u32,
+    unmatched_count: u8,
+    meld_count: u8,
+    can_close: bool,
+    close_improver_count: u8,
+    own_distance_to_elim: i32,
+    opp_distance_to_elim: i32,
+    top_discard: String,
+    turn_number: u32,
+    known_opp_cards_count: u8,
+    score_aware_action: String,
+    rule_based_action: String,
+    equity_at_score_aware_action: f32,
+    equity_at_rule_based_action: f32,
+}
+
+impl From<&DisagreementRow> for CsvRow {
+    fn from(r: &DisagreementRow) -> Self {
+        CsvRow {
+            seed: r.seed,
+            turn: r.turn,
+            current_seat: r.current_seat,
+            phase: phase_str(r.phase).to_string(),
+            unmatched_total: r.features.unmatched_total,
+            unmatched_count: r.features.unmatched_count,
+            meld_count: r.features.meld_count,
+            can_close: r.features.can_close,
+            close_improver_count: r.features.close_improver_count,
+            own_distance_to_elim: r.features.own_distance_to_elim,
+            opp_distance_to_elim: r.features.opp_distance_to_elim,
+            top_discard: r
+                .features
+                .top_discard
+                .map(|c| c.to_string())
+                .unwrap_or_default(),
+            turn_number: r.features.turn_number,
+            known_opp_cards_count: r.features.known_opp_cards_count,
+            score_aware_action: action_label(&r.score_aware_action),
+            rule_based_action: action_label(&r.rule_based_action),
+            equity_at_score_aware_action: r.equity_at_score_aware_action,
+            equity_at_rule_based_action: r.equity_at_rule_based_action,
+        }
     }
-    Ok(())
+}
+
+/// Write the rows as CSV via `csv::Writer`. Actions are rendered as
+/// display strings so the file opens in a spreadsheet without
+/// post-processing; the structured `DisagreementRow` stays available
+/// programmatically.
+pub fn write_csv<W: Write>(rows: &[DisagreementRow], w: &mut W) -> io::Result<()> {
+    let mut wtr = csv::Writer::from_writer(w);
+    for r in rows {
+        wtr.serialize(CsvRow::from(r))
+            .map_err(|e| io::Error::other(e.to_string()))?;
+    }
+    wtr.flush()
+}
+
+/// Read a CSV written by [`write_csv`] into a list of flat `CsvRow`
+/// records. Slice-3 counterfactual-sweep consumes these rows to pick
+/// positions to probe; the full `DisagreementRow` is not reconstructed
+/// because the position (seed, turn, seat) is enough to replay back to
+/// the right state.
+pub fn read_csv_rows<R: std::io::Read>(r: R) -> io::Result<Vec<CsvRecord>> {
+    let mut rdr = csv::Reader::from_reader(r);
+    let mut out = Vec::new();
+    for res in rdr.deserialize::<CsvRow>() {
+        let row = res.map_err(|e| io::Error::other(e.to_string()))?;
+        out.push(CsvRecord {
+            seed: row.seed,
+            turn: row.turn,
+            current_seat: row.current_seat,
+            phase: row.phase,
+            score_aware_action: row.score_aware_action,
+            rule_based_action: row.rule_based_action,
+            equity_at_score_aware_action: row.equity_at_score_aware_action,
+            equity_at_rule_based_action: row.equity_at_rule_based_action,
+        });
+    }
+    Ok(out)
+}
+
+/// Compact replay-friendly view of a CSV row. Slice 3 uses `(seed,
+/// turn, current_seat)` to drive a match back to the right decision
+/// point and reconstructs features / belief from the observation then.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CsvRecord {
+    pub seed: u64,
+    pub turn: u32,
+    pub current_seat: u8,
+    pub phase: String,
+    pub score_aware_action: String,
+    pub rule_based_action: String,
+    pub equity_at_score_aware_action: f32,
+    pub equity_at_rule_based_action: f32,
 }
 
 fn phase_str(p: Phase) -> &'static str {
@@ -340,6 +405,26 @@ mod tests {
         assert!(header.ends_with(",equity_at_rule_based_action"));
         let data_lines: Vec<&str> = lines.collect();
         assert_eq!(data_lines.len(), rows.len());
+    }
+
+    #[test]
+    fn csv_read_roundtrips_seed_turn_actions() {
+        let rows = mine_with_samples(&[0xC0FFEEu64], 2, 4);
+        assert!(!rows.is_empty());
+        let mut buf: Vec<u8> = Vec::new();
+        write_csv(&rows, &mut buf).unwrap();
+        let records = read_csv_rows(buf.as_slice()).unwrap();
+        assert_eq!(records.len(), rows.len());
+        for (src, rec) in rows.iter().zip(records.iter()) {
+            assert_eq!(rec.seed, src.seed);
+            assert_eq!(rec.turn, src.turn);
+            assert_eq!(rec.current_seat, src.current_seat);
+            assert_eq!(
+                rec.score_aware_action,
+                action_label(&src.score_aware_action)
+            );
+            assert_eq!(rec.rule_based_action, action_label(&src.rule_based_action));
+        }
     }
 
     #[test]
