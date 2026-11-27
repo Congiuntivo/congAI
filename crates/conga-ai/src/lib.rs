@@ -7,6 +7,7 @@
 //! layer a score-aware agent on top of it.
 
 pub mod belief;
+pub mod disagreement;
 pub mod driver;
 pub mod equity;
 pub mod eval;
@@ -19,6 +20,7 @@ pub mod score_aware;
 pub mod search;
 
 pub use belief::BeliefTracker;
+pub use disagreement::{DisagreementRow, action_label, mine_disagreements, write_csv};
 pub use driver::{DriverError, run_player};
 pub use equity::{EquityTable, committed_table};
 pub use eval::{

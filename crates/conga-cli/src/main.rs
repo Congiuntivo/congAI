@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use conga_cli::{build_equity, debug_hand, eval, play, replay};
+use conga_cli::{build_equity, debug_hand, eval, mine_disagreements, play, replay};
 
 #[derive(Parser)]
 #[command(name = "conga-cli", about = "Conga engine command-line tools")]
@@ -73,6 +73,20 @@ enum Command {
         /// full build; do not write any file.
         #[arg(long, default_value_t = false)]
         smoke: bool,
+    },
+    /// Mine positions where `score-aware` and `rule-based` disagree
+    /// (D46). Writes a CSV to `--out`.
+    MineDisagreements {
+        /// Number of seeds to mine. Seeds run `0..seeds`.
+        #[arg(long, default_value_t = 50)]
+        seeds: u32,
+        /// Cap on rows collected per seed; the match breaks early once
+        /// hit.
+        #[arg(long, default_value_t = 5)]
+        max_per_seed: u32,
+        /// Where to write the CSV.
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Head-to-head evaluation of two baseline agents.
     Eval {
@@ -166,6 +180,22 @@ fn main() {
             };
             let stdout = std::io::stdout().lock();
             if let Err(e) = build_equity::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Command::MineDisagreements {
+            seeds,
+            max_per_seed,
+            out,
+        } => {
+            let opts = mine_disagreements::MineOptions {
+                seeds,
+                max_per_seed,
+                out,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = mine_disagreements::run(opts, stdout) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }

@@ -4,5 +4,6 @@
 pub mod build_equity;
 pub mod debug_hand;
 pub mod eval;
+pub mod mine_disagreements;
 pub mod play;
 pub mod replay;
