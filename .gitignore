@@ -25,3 +25,6 @@ build/
 
 # Ad-hoc eval / diagnostic logs at repo root (findings live in docs/)
 /m*-*.log
+
+# Training datasets (committed weights live in crates/conga-ai/assets/)
+/data/

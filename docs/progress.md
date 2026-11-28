@@ -4,8 +4,9 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 6 accepted on 2026-11-28, tagged `m6-accepted`. Branch `m6-explanations` kept for history.
-- No open slice. Awaiting Simone's go-ahead to plan m7 (value model + search leaf; pushed deliverables from D37 and the score-aware decline-path question raised by D50).
+- Milestone 7 in progress on branch `m7-value-model` (from `main` at `m6-accepted`).
+- Slice 0 (pre-slice gate) done: plan saved to `docs/plans/m7.md`, D51–D57 logged in `docs/decisions.md`, `/data/` added to `.gitignore`. Three CLAUDE.md checks green (339 passed, 10 ignored).
+- Open slice: slice 1 (`conga-ai::encoding` module — fixed-size seat-relative 260-float encoding per D53).
 - Last accepted tag: `m6-accepted`
 
 ## Done
@@ -36,4 +37,5 @@ None.
 
 ## Next
 
-- Milestone 7: value model + non-greedy search leaf. D37 deferred the standalone search agent here, and D50 surfaced a related question — score-aware's "decline to close" path (D41) adds negligible marginal win rate over the close-card picker alone, suggesting the equity-table evaluator is already near its ceiling for the showdown question. A learned value model that scores non-terminal positions (in units the equity table can consume) would (a) unlock the deferred PIMC exit test and (b) give the counterfactual / disagreement tools a stronger agent to mine against than score-aware.
+- Milestone 7 slice 1: `conga-ai::encoding` module. Fixed-size seat-relative 260-float encoding (D53). `pub fn encode(&Observation, &BeliefTracker) -> [f32; 260]` with the seat-relative permutation layer, cards-seen union, phase one-hot. Tests pin size, bit layout, cyclic invariance and absent-seat zeros.
+- Then slices 2–6 per `docs/plans/m7.md`: value-model type, rollout-leaf integration with toy weights, self-play labelling CLI, Python training + committed `value_model_v1.json`, exit regression + milestone wrap.
