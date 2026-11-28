@@ -5,8 +5,8 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone 7 in progress on branch `m7-value-model` (from `main` at `m6-accepted`).
-- Slice 0 (pre-slice gate) done: plan saved to `docs/plans/m7.md`, D51–D57 logged in `docs/decisions.md`, `/data/` added to `.gitignore`. Three CLAUDE.md checks green (339 passed, 10 ignored).
-- Open slice: slice 1 (`conga-ai::encoding` module — fixed-size seat-relative 260-float encoding per D53).
+- Slice 1 done: `conga-ai::encoding` with `pub const ENCODING_SIZE: usize = 261;`, `pub const ENCODING_VERSION: u32 = 1;` and `pub fn encode(&Observation, &BeliefTracker) -> [f32; 261]`. Seat-relative permutation (slot 0 = own, slot i = (own + i) mod N), cards-seen union over own-hand + discard + melds + belief known_held, phase one-hot (Draw/Discard/Showdown), per-seat scores/hand-sizes/known_held, seat-present and current-seat one-hot. 11 encoding tests pass. D52/D53 amended in slice 1 from 260 → 261 (slice-0 arithmetic miscount). Three CLAUDE.md checks green (350 passed total, 10 ignored).
+- Open slice: slice 2 (`conga-ai::value_model` — `ValueModel` type with hand-written forward pass and JSON load/save, per D52).
 - Last accepted tag: `m6-accepted`
 
 ## Done
@@ -37,5 +37,5 @@ None.
 
 ## Next
 
-- Milestone 7 slice 1: `conga-ai::encoding` module. Fixed-size seat-relative 260-float encoding (D53). `pub fn encode(&Observation, &BeliefTracker) -> [f32; 260]` with the seat-relative permutation layer, cards-seen union, phase one-hot. Tests pin size, bit layout, cyclic invariance and absent-seat zeros.
-- Then slices 2–6 per `docs/plans/m7.md`: value-model type, rollout-leaf integration with toy weights, self-play labelling CLI, Python training + committed `value_model_v1.json`, exit regression + milestone wrap.
+- Milestone 7 slice 2: `conga-ai::value_model` module. `ValueModel { schema_version, encoding_version, input_size, layers, meta }`, `Activation { Relu, Sigmoid, Linear }`, `forward(&self, x: &[f32]) -> f32` via hand-rolled matmul, `from_json_str`/`to_json_string_pretty`/`load_file` with validation (reject mismatched input size, encoding version, layer chain or non-scalar final layer). No search integration yet.
+- Then slices 3–6 per `docs/plans/m7.md`: rollout-leaf integration with toy weights, self-play labelling CLI, Python training + committed `value_model_v1.json`, exit regression + milestone wrap.

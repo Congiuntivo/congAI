@@ -12,6 +12,7 @@ pub mod close_helpers;
 pub mod counterfactual;
 pub mod disagreement;
 pub mod driver;
+pub mod encoding;
 pub mod equity;
 pub mod eval;
 pub mod features;
@@ -33,6 +34,7 @@ pub use disagreement::{
     CsvRecord, DisagreementRow, action_label, mine_disagreements, read_csv_rows, write_csv,
 };
 pub use driver::{DriverError, run_player};
+pub use encoding::{ENCODING_SIZE, ENCODING_VERSION, encode};
 pub use equity::{EquityTable, committed_table};
 pub use eval::{
     BaselineAgent, EvalReport, MatchOutcome, PairedResult, report_from_pairs, run_batch, run_match,
