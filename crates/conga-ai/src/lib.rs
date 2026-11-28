@@ -23,6 +23,7 @@ pub mod rule_based;
 pub mod score_aware;
 pub mod search;
 pub mod validation;
+pub mod value_model;
 
 pub use belief::BeliefTracker;
 pub use candidates::{CleanSplitCloseWrapper, DEFAULT_CLEAN_SPLIT_SAMPLES};
@@ -48,3 +49,4 @@ pub use rule_based::RuleBasedPlayer;
 pub use score_aware::{DEFAULT_SCORE_AWARE_SAMPLES, ScoreAwarePlayer};
 pub use search::{RolloutPolicy, SearchPlayer};
 pub use validation::{DEFAULT_PAIRS_PER_GATE, ValidationReport, validate_tactic};
+pub use value_model::{Activation, Layer, SCHEMA_VERSION, ValueModel, ValueModelError};

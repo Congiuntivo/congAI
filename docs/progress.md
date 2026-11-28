@@ -5,8 +5,8 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone 7 in progress on branch `m7-value-model` (from `main` at `m6-accepted`).
-- Slice 1 done: `conga-ai::encoding` with `pub const ENCODING_SIZE: usize = 261;`, `pub const ENCODING_VERSION: u32 = 1;` and `pub fn encode(&Observation, &BeliefTracker) -> [f32; 261]`. Seat-relative permutation (slot 0 = own, slot i = (own + i) mod N), cards-seen union over own-hand + discard + melds + belief known_held, phase one-hot (Draw/Discard/Showdown), per-seat scores/hand-sizes/known_held, seat-present and current-seat one-hot. 11 encoding tests pass. D52/D53 amended in slice 1 from 260 → 261 (slice-0 arithmetic miscount). Three CLAUDE.md checks green (350 passed total, 10 ignored).
-- Open slice: slice 2 (`conga-ai::value_model` — `ValueModel` type with hand-written forward pass and JSON load/save, per D52).
+- Slice 2 done: `conga-ai::value_model` with `Activation { Relu, Sigmoid, Linear }`, `Layer { out_size, activation, weights: Vec<Vec<f32>>, biases }`, `ValueModel { schema_version, encoding_version, input_size, layers, meta: serde_json::Value }`, `ValueModelError` enum (Io / Parse / EncodingVersionMismatch / InputSizeMismatch / EmptyLayers / LayerShapeMismatch / LayerChainMismatch / FinalLayerOutSizeNotOne), `forward(&self, x) -> f32` via plain `Vec<f32>` matmul, `from_json_str` / `to_json_string_pretty` / `load_file` with validation at load time. No search integration yet. 13 inline tests. Three CLAUDE.md checks green (363 passed total, 10 ignored).
+- Open slice: slice 3 (rollout-leaf integration into `SearchPlayer` with equity-units everywhere, toy-weights fixture, `BaselineAgent::ValueSearch`, D55).
 - Last accepted tag: `m6-accepted`
 
 ## Done
@@ -37,5 +37,5 @@ None.
 
 ## Next
 
-- Milestone 7 slice 2: `conga-ai::value_model` module. `ValueModel { schema_version, encoding_version, input_size, layers, meta }`, `Activation { Relu, Sigmoid, Linear }`, `forward(&self, x: &[f32]) -> f32` via hand-rolled matmul, `from_json_str`/`to_json_string_pretty`/`load_file` with validation (reject mismatched input size, encoding version, layer chain or non-scalar final layer). No search integration yet.
-- Then slices 3–6 per `docs/plans/m7.md`: rollout-leaf integration with toy weights, self-play labelling CLI, Python training + committed `value_model_v1.json`, exit regression + milestone wrap.
+- Milestone 7 slice 3: rollout-leaf integration. `LeafEvaluator { Greedy, ValueModel(Arc<ValueModel>) }` + `leaf_depth: u32` on `SearchPlayer` with builders. Rollout loop refactored to equity units throughout (terminal via `committed_table().lookup`; depth-D with a `ValueModel` calls `encode` + `forward`; Showdown-mid-rollout falls back to greedy to a true terminal then equity-converts). Toy equity-proxy model built as a test fixture, not a committed asset. `BaselineAgent::ValueSearch` + `--ai value-search` CLI. Smoke test: beats random > 70%. (D55)
+- Then slices 4–6 per `docs/plans/m7.md`: self-play labelling CLI, Python training + committed `value_model_v1.json`, exit regression + milestone wrap.
