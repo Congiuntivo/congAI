@@ -3,7 +3,10 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use conga_cli::{build_equity, debug_hand, eval, play, replay};
+use conga_cli::{
+    build_equity, counterfactual_sweep, debug_hand, eval, mine_disagreements, play, replay,
+    validate_tactic,
+};
 
 #[derive(Parser)]
 #[command(name = "conga-cli", about = "Conga engine command-line tools")]
@@ -40,8 +43,8 @@ enum Command {
         /// Suit glyphs: `french` (default) uses ♣♦♥♠, `spanish` uses ✦●♡✚.
         #[arg(long, default_value = "french", value_parser = ["french", "spanish", "f", "s"])]
         suits: String,
-        /// Opponent agent: `random`, `greedy`, `rule-based`, `search` or `score-aware`.
-        #[arg(long, default_value = "random", value_parser = ["random", "greedy", "rule-based", "search", "score-aware"])]
+        /// Opponent agent: `random`, `greedy`, `rule-based`, `search`, `score-aware` or `clean-split-close`.
+        #[arg(long, default_value = "random", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close"])]
         ai: String,
         /// Belief-samples per decision for the `search` agent. Ignored
         /// by the other agents.
@@ -74,13 +77,65 @@ enum Command {
         #[arg(long, default_value_t = false)]
         smoke: bool,
     },
+    /// Probe each position in a disagreements CSV for counterfactual
+    /// sensitivity (score ±5/±10 on both sides, close-card swaps).
+    /// Writes the aggregated sweep as JSON (D46).
+    CounterfactualSweep {
+        /// Disagreements CSV produced by `mine-disagreements`.
+        #[arg(long)]
+        from: PathBuf,
+        /// Number of positions to probe (reads the top-N rows of the
+        /// CSV).
+        #[arg(long, default_value_t = 10)]
+        n: u32,
+        /// Belief-samples per equity lookup. Matches the score-aware
+        /// agent's default (20).
+        #[arg(long, default_value_t = 20)]
+        samples: u32,
+        /// Where to write the sweep JSON.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Mine positions where `score-aware` and `rule-based` disagree
+    /// (D46). Writes a CSV to `--out`.
+    MineDisagreements {
+        /// Number of seeds to mine. Seeds run `0..seeds`.
+        #[arg(long, default_value_t = 50)]
+        seeds: u32,
+        /// Cap on rows collected per seed; the match breaks early once
+        /// hit.
+        #[arg(long, default_value_t = 5)]
+        max_per_seed: u32,
+        /// Where to write the CSV.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Validate a candidate tactic through the m6 loop (D47, D49).
+    /// Runs paired matches vs the unchanged baseline and vs the
+    /// strong baseline, prints both reports and the pass decision.
+    ValidateTactic {
+        /// Candidate name. Current support: `clean-split-close`.
+        #[arg(long, value_parser = ["clean-split-close"])]
+        candidate: String,
+        /// Paired deals per gate (so `2*pairs` total matches per
+        /// gate). Default matches the m5 regression precision.
+        #[arg(long, default_value_t = 500)]
+        pairs: u32,
+        /// Base seed for both gates' paired matches. Belief sampling
+        /// inside the candidate derives from the same seed per match.
+        #[arg(long, default_value_t = 0)]
+        seed: u64,
+        /// Belief samples per Close decision (candidate + strong).
+        #[arg(long, default_value_t = 20)]
+        samples: u32,
+    },
     /// Head-to-head evaluation of two baseline agents.
     Eval {
-        /// First agent: `random`, `greedy`, `rule-based`, `search` or `score-aware`.
-        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based", "search", "score-aware"])]
+        /// First agent: `random`, `greedy`, `rule-based`, `search`, `score-aware` or `clean-split-close`.
+        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close"])]
         agent_a: String,
         /// Second agent.
-        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based", "search", "score-aware"])]
+        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close"])]
         agent_b: String,
         /// Number of matches to play (rounded up to the nearest even
         /// number so every chance stream is run with seats swapped).
@@ -166,6 +221,58 @@ fn main() {
             };
             let stdout = std::io::stdout().lock();
             if let Err(e) = build_equity::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Command::CounterfactualSweep {
+            from,
+            n,
+            samples,
+            out,
+        } => {
+            let opts = counterfactual_sweep::SweepOptions {
+                from,
+                n,
+                samples,
+                out,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = counterfactual_sweep::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Command::MineDisagreements {
+            seeds,
+            max_per_seed,
+            out,
+        } => {
+            let opts = mine_disagreements::MineOptions {
+                seeds,
+                max_per_seed,
+                out,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = mine_disagreements::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Command::ValidateTactic {
+            candidate,
+            pairs,
+            seed,
+            samples,
+        } => {
+            let opts = validate_tactic::ValidateOptions {
+                candidate,
+                pairs,
+                seed,
+                samples,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = validate_tactic::run(opts, stdout) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }

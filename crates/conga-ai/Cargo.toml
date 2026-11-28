@@ -11,6 +11,7 @@ conga-core = { path = "../conga-core" }
 conga-protocol = { path = "../conga-protocol" }
 conga-rules = { path = "../conga-rules" }
 conga-server = { path = "../conga-server" }
+csv = { workspace = true }
 rand_chacha = { workspace = true }
 rand_core = { workspace = true }
 serde = { workspace = true }

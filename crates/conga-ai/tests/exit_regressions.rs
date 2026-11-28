@@ -12,8 +12,13 @@
 //! m5 adds `score_aware_beats_rule_based`: the Wilson-LB-above-0.5 gate
 //! on 2000 paired matches (D42) that justifies the match-equity +
 //! equity-aware Close-card selection built in slices 1-4.
+//!
+//! m6 adds `clean_split_close_beats_rule_based`: the slice-5 exit test
+//! on the first candidate tactic. 1000 paired matches (D49), Wilson LB
+//! > 0.5 on the wrapped tactic's win rate.
 
-use conga_ai::{BaselineAgent, report_from_pairs, run_batch, wilson_ci};
+use conga_ai::candidates::CleanSplitCloseWrapper;
+use conga_ai::{BaselineAgent, RuleBasedPlayer, report_from_pairs, run_batch, wilson_ci};
 use conga_core::Seat;
 use conga_rules::StandardConga;
 use std::time::Instant;
@@ -74,5 +79,47 @@ fn score_aware_beats_rule_based() {
     assert!(
         lo > 0.5,
         "score_aware_beats_rule_based: wins {a_wins}/{games}, Wilson lo {lo:.4} (expected > 0.5)"
+    );
+}
+
+#[test]
+#[ignore = "slow (1000 full matches, ~2 min release); run with --release --ignored"]
+fn clean_split_close_beats_rule_based() {
+    // m6 exit test (D49): 1000 paired deals of the CleanSplitClose
+    // wrapper over RuleBased vs unchanged rule-based. The tactic
+    // under test IS the equity-aware close-card picker factored out
+    // of ScoreAware (D47). It wraps the same rule-based base, so any
+    // delta vs unchanged rule-based is attributable to the clean-
+    // split close pick. Expectation: should clear 0.5 cleanly (same
+    // signal that drives D45's ~7 pp edge).
+    let rules = StandardConga::default();
+    let seed: u64 = 0x1;
+    let games = 1000u32;
+    let pairs = games / 2;
+    let samples = 20u32;
+    let tactic_seed = seed ^ SEED_A_SALT;
+    let unchanged_seed = seed ^ SEED_B_SALT;
+    let builder_tactic =
+        move || CleanSplitCloseWrapper::new(RuleBasedPlayer::new(), samples, tactic_seed);
+    let builder_unchanged =
+        move || BaselineAgent::from_name("rule-based", unchanged_seed).expect("rule-based");
+
+    let started = Instant::now();
+    let results = run_batch(
+        &rules,
+        builder_tactic,
+        builder_unchanged,
+        pairs,
+        seed,
+        Seat::new(0),
+    );
+    let report = report_from_pairs(&results, started.elapsed());
+    let (lo, _hi) = wilson_ci(report.a_wins, report.games, Z);
+    assert!(
+        lo > 0.5,
+        "clean_split_close_beats_rule_based: wins {}/{}, Wilson lo {:.4} (expected > 0.5)",
+        report.a_wins,
+        report.games,
+        lo
     );
 }

@@ -13,6 +13,7 @@ use conga_server::MatchState;
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 
+use crate::candidates::{CleanSplitCloseWrapper, DEFAULT_CLEAN_SPLIT_SAMPLES};
 use crate::greedy::GreedyPlayer;
 use crate::player::Player;
 use crate::random::RandomPlayer;
@@ -222,6 +223,7 @@ pub enum BaselineAgent {
     RuleBased(RuleBasedPlayer),
     Search(Box<SearchPlayer>),
     ScoreAware(Box<ScoreAwarePlayer>),
+    CleanSplitClose(Box<CleanSplitCloseWrapper<RuleBasedPlayer>>),
 }
 
 /// Default number of belief-sampled worlds the search expands per act
@@ -264,12 +266,29 @@ impl BaselineAgent {
                     k, seed,
                 ))))
             }
+            "clean-split-close" => {
+                let k = if samples == DEFAULT_SEARCH_SAMPLES {
+                    DEFAULT_CLEAN_SPLIT_SAMPLES
+                } else {
+                    samples
+                };
+                Some(BaselineAgent::CleanSplitClose(Box::new(
+                    CleanSplitCloseWrapper::new(RuleBasedPlayer::new(), k, seed),
+                )))
+            }
             _ => None,
         }
     }
 
     pub fn names() -> &'static [&'static str] {
-        &["random", "greedy", "rule-based", "search", "score-aware"]
+        &[
+            "random",
+            "greedy",
+            "rule-based",
+            "search",
+            "score-aware",
+            "clean-split-close",
+        ]
     }
 }
 
@@ -281,6 +300,7 @@ impl Player for BaselineAgent {
             BaselineAgent::RuleBased(p) => p.act(obs, legal),
             BaselineAgent::Search(p) => p.act(obs, legal),
             BaselineAgent::ScoreAware(p) => p.act(obs, legal),
+            BaselineAgent::CleanSplitClose(p) => p.act(obs, legal),
         }
     }
 
@@ -291,6 +311,7 @@ impl Player for BaselineAgent {
             BaselineAgent::RuleBased(p) => p.notify(event),
             BaselineAgent::Search(p) => p.notify(event),
             BaselineAgent::ScoreAware(p) => p.notify(event),
+            BaselineAgent::CleanSplitClose(p) => p.notify(event),
         }
     }
 }

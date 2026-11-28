@@ -60,6 +60,18 @@ impl BeliefTracker {
         self.known_held.get(&seat)
     }
 
+    /// Drop a specific inferred card from `seat`'s `known_held` without
+    /// producing an event. Used by counterfactual probes to answer
+    /// "what would the agent do if it did not know `seat` was holding
+    /// this card?" without rewriting the event history. Returns true
+    /// if the card was removed.
+    pub fn remove_known(&mut self, seat: Seat, card: Card) -> bool {
+        match self.known_held.get_mut(&seat) {
+            Some(set) => set.remove(&card),
+            None => false,
+        }
+    }
+
     pub fn notify(&mut self, event: &Event) {
         match event {
             Event::Discarded { seat, card } => {

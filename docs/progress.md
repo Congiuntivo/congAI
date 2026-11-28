@@ -4,8 +4,15 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Now
 
-- Milestone 5 accepted on 2026-11-27, tagged `m5-accepted`. Branch `m5-match-equity` kept for history.
-- No open slice. Awaiting Simone's go-ahead to plan m6 (explanation tools + validation loop; kickoff prompt at `docs/prompts/06-milestone-6.md`).
+- Milestone 6 in progress on branch `m6-explanations` (from `main` at `m5-accepted`).
+- Plan saved to `docs/plans/m6.md`. Decisions D46-D49 logged in `docs/decisions.md`.
+- Slice 1 (features module, D48) committed at `fa99503`.
+- Slice 2 (disagreement mining + diagnostic, D46) committed at `d8c13b7`. Committed artefact `crates/conga-ai/diagnostics/m6_disagreements.csv` has 248 rows from 50 seeds. As expected per D45, disagreements are overwhelmingly on Close decisions (close-card selection) with a small tail where score-aware's equity gate declines to close.
+- Slice 2 follow-up: `csv` crate added to the workspace at Simone's request (`52ffe94`). Disagreement writer uses `csv::Writer`; `read_csv_rows` yields a flat `CsvRecord` for slice-3 replay.
+- Slice 3 (counterfactual probes + diagnostic, D46) committed at `4715faa`. Committed artefact `crates/conga-ai/diagnostics/m6_counterfactuals.json` has 92 rows across the top 10 mined positions. DisagreementRow gained a `hand` column so (seed, hand, turn, seat, phase) is the unique replay key.
+- Slice 4 (validation harness + clean-split candidate, D47 + D49) committed at `c0f66db`.
+- Slice 5 (validation loop end-to-end + exit regression + promotion, D50) committed at `817bda9`. Candidate passed the loop: 573/1000 vs rule-based (seed 0x0), Wilson 95% [0.5421, 0.6033], LB > 0.5. Vs score-aware (informational): 511/1000, CI straddles 0.5 — the close-card picker captures essentially the full score-aware edge over rule-based. Promoted to `BaselineAgent::CleanSplitClose` + `--ai clean-split-close`. `#[ignore]`d regression `clean_split_close_beats_rule_based` added (seed 0x1, 125.8 s release). 339 tests pass.
+- m6 exit test satisfied. Awaiting Simone's acceptance to merge `m6-explanations` into `main` and tag `m6-accepted`.
 - Last accepted tag: `m5-accepted`
 
 ## Done
@@ -30,6 +37,7 @@ None.
 - D37: The m4 design-doc exit test ("search beats rule-based") was not met and is pushed to m7. Three diagnostic evals showed PIMC with greedy rollouts cannot beat greedy (0–12.5%) due to structural strategy fusion (rollout policy stronger than root policy). The fix needs a non-greedy rollout leaf, which is m7's learned value model. `SearchPlayer` ships as scaffolding (beats random 100-0).
 - D38: Rule-based v2 missed the D35 gate (34–37% vs greedy on three 200-game smokes, same as D28's 36–38%). Kept as a refactor onto the belief tracker (same strength, cleaner code) rather than reverted. A rule-based that actually beats greedy is deferred to m5 where match-equity gives a stronger signal than the reactive-safety heuristic can.
 - D43: `rayon` added to the workspace dependency table (not in the design doc's initial list). Serial compute at the slice-2 smoke measured ~23 mps weighted-average — ~14 h at N=100 and still ~170 min at N=20, past the "15 min target" that would have kept it serial. Measured parallel speedup on 12 cores was 3.4x (78 mps) due to cell-time imbalance (-50..-50 cells run an order of magnitude slower than near-elim cells).
+- m6: `csv = "1.4"` added to the workspace dependency table (not in the design doc's initial list). Approved by Simone at the start of m6 slice 3 to replace the hand-written CSV writer with a schema-safe reader-capable alternative. Previously the slice-2 writer emitted CSV by hand (~20 lines); slice 3 needs to read the CSV back and crate-level serde is cleaner than a hand-parser.
 - D45: Slice-4 pivot. The D41-planned "close iff post_close_equity > continue_equity" gate turned out to be a no-op on the real N=50 table: closer-delta ≤ 0 and opp-delta ≥ 0 make closing almost always strictly improving, and the ±0.07 table noise is larger than the typical delta. Shipped agent picks the best among legal Close options against a *shared* belief sample (variance cancels in the relative comparison) and only declines if even the best is worse than status quo. Primary edge is close-card selection for the -10 clean-split bonus.
 
 ## Next
