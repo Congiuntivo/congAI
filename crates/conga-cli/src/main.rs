@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 
 use conga_cli::{
     build_equity, counterfactual_sweep, debug_hand, eval, mine_disagreements, play, replay,
-    validate_tactic,
+    self_play_batch, validate_tactic,
 };
 
 #[derive(Parser)]
@@ -128,6 +128,24 @@ enum Command {
         /// Belief samples per Close decision (candidate + strong).
         #[arg(long, default_value_t = 20)]
         samples: u32,
+    },
+    /// Generate a labelled self-play dataset for the m7 value-model
+    /// trainer (D54). Plays `matches_each` paired-deal matches of
+    /// `score-aware` vs `score-aware` plus `clean-split-close` vs
+    /// `clean-split-close`, labels every Draw/Discard decision with
+    /// the hand-end equity lookup, writes the binary dataset file.
+    SelfPlayBatch {
+        /// Paired-deal matches per agent style. Total matches run =
+        /// `2 * matches_each * len(SELF_PLAY_AGENTS)`; see
+        /// `conga_ai::dataset::SELF_PLAY_AGENTS`.
+        #[arg(long, default_value_t = 20)]
+        matches_each: u32,
+        /// Base RNG seed. Per-match seeds are derived deterministically.
+        #[arg(long, default_value_t = 42)]
+        seed: u64,
+        /// Where to write the binary dataset file.
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Head-to-head evaluation of two baseline agents.
     Eval {
@@ -273,6 +291,22 @@ fn main() {
             };
             let stdout = std::io::stdout().lock();
             if let Err(e) = validate_tactic::run(opts, stdout) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Command::SelfPlayBatch {
+            matches_each,
+            seed,
+            out,
+        } => {
+            let opts = self_play_batch::SelfPlayBatchOptions {
+                matches_each,
+                seed,
+                out,
+            };
+            let stdout = std::io::stdout().lock();
+            if let Err(e) = self_play_batch::run(opts, stdout) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }

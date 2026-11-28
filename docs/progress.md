@@ -5,8 +5,9 @@ Claude updates this file at every stop. A new session reads it first.
 ## Now
 
 - Milestone 7 in progress on branch `m7-value-model` (from `main` at `m6-accepted`).
-- Slice 3 done: rollout-leaf integration in `SearchPlayer`. New `LeafEvaluator { Greedy, ValueModel(Arc<ValueModel>) }` and `leaf_depth: u32` (default 3) with builders `.with_leaf_evaluator(..)` / `.with_leaf_depth(..)`. `rollout` refactored to equity units in 2-player play via `committed_table().lookup(own_total, opp_total)` on terminal; depth-D with a `ValueModel` calls `encoding::encode` + `model.forward`; Showdown-mid-rollout falls back to greedy continuation (not the model) because D54's training distribution excludes Showdown. 3-4P fall back to the legacy raw-points formula. New `neural_evals: u64` counter + getter. `value_model::toy_proxy()` ships the slice-3 hand-coded proxy (sigmoid of opp-score − own-score). `BaselineAgent::ValueSearch` + `--ai value-search` wired across `play` / `eval` CLI. Three new inline tests (default leaf, depth-0 evaluator, forward-called smoke) + one `#[ignore]`d `value_search_toy_beats_random` (37.5 s release, 20/20 at 100%). CLI smoke: `value-search` 2-0 vs `random` at 2 games, mean final score 4.0 vs 108.5. Three CLAUDE.md checks green (366 passed total, 11 ignored).
-- Open slice: slice 4 (self-play labelling CLI — `conga-ai::dataset`, binary f32 format, `conga-cli self-play-batch`, D54).
+- Slice 4 done: self-play labelling CLI. `conga-ai::dataset` with `Sample { encoding: [f32; 261], label: f32 }`, binary format (8-byte magic `CONGADS1` + LE u32 encoding_version + LE u32 input_size + LE u64 num_samples + rows of 261+1 f32 LE). `generate(matches_each, seed)` runs paired-deal self-play of `score-aware` vs `score-aware` plus `clean-split-close` vs `clean-split-close` and labels every Draw/Discard decision with `committed_table().lookup(hand_end_own, hand_end_opp)` (seat-relative). Rayon-parallel across (agent, match) pairs (D43 precedent). Showdown decisions excluded. `write_binary` / `read_binary` round-trip tested. `rayon = { workspace = true }` added to `conga-ai/Cargo.toml` — design-doc has always listed `rayon` on `conga-ai` (`docs/design.md:311`), so no workspace-table change. `conga-cli self-play-batch --matches-each N --seed S --out path` wired. 6 inline tests. Three CLAUDE.md checks green (372 passed total, 11 ignored).
+- CLI smoke (release, 12 cores): `--matches-each 2 --seed 1` ⇒ 8 matches, 5116 samples, 5.1 MiB, 0.7 s (7451 samples/sec). Linear extrapolation to `--matches-each 2000`: ~5.1 M samples / ~5.1 GB / ~11 min — flagged for slice 5 (dataset size may need to shrink, see Open questions).
+- Open slice: slice 5 (Python training pipeline + committed `value_model_v1.json`, D51, D57).
 - Last accepted tag: `m6-accepted`
 
 ## Done
@@ -22,7 +23,11 @@ Claude updates this file at every stop. A new session reads it first.
 
 ## Open questions for Simone
 
-None.
+- Slice-5 training dataset size. Slice-4 smoke measured ~640 samples/match × 8 matches / 0.7s on 12 cores. The plan's "2000 matches_each" would emit ~5.1 M samples / ~5.1 GB. Three options:
+  - Shrink to `matches_each = 200` (~500 k samples / ~520 MB) — recommended, fits comfortably in RAM for CPU training.
+  - Keep 2000 and page through the file in Python with `np.memmap`.
+  - Subsample (e.g. keep 1 in N decisions) during generation.
+  To settle before slice 5 starts.
 
 ## Deviations from the design doc
 
@@ -37,5 +42,5 @@ None.
 
 ## Next
 
-- Milestone 7 slice 4: self-play labelling CLI. `conga-ai::dataset` with `Sample { encoding: [f32; ENCODING_SIZE], label: f32 }`, binary file format (8-byte magic `CONGADS1`, LE u32 encoding_version, LE u32 input_size, LE u64 num_samples, then rows of 261+1 f32), and `generate(matches_each, seed)` running paired-deal self-play of `score-aware` vs `score-aware` plus `clean-split-close` vs `clean-split-close`. `conga-cli self-play-batch --matches-each N --seed S --out path` subcommand. Showdown decisions excluded. Rayon-parallel across matches (D43 precedent). (D54)
-- Then slices 5–6 per `docs/plans/m7.md`: Python training + committed `value_model_v1.json`, exit regression + milestone wrap.
+- Milestone 7 slice 5: Python training pipeline + committed weights. `training/requirements.txt` (torch + numpy pinned), `training/train_value_model.py` reading the slice-4 binary file (skip 24-byte header + `np.fromfile(..., dtype=np.float32).reshape(-1, 262)`), splitting 80/20 by match to avoid leakage, training the 261→128→128→1 MLP with Adam MSE, `torch.set_num_threads(1)` + pinned seeds, exporting `crates/conga-ai/assets/value_model_v1.json` in the slice-2 schema. `training/README.md` with the full pipeline. `ValueModel::committed_v1()` loader + swap `BaselineAgent::ValueSearch` dispatcher off `toy_proxy`. (D51, D57)
+- Then slice 6: exit regression + milestone wrap.

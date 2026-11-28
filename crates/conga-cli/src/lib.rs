@@ -8,4 +8,5 @@ pub mod eval;
 pub mod mine_disagreements;
 pub mod play;
 pub mod replay;
+pub mod self_play_batch;
 pub mod validate_tactic;

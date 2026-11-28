@@ -10,6 +10,7 @@ pub mod belief;
 pub mod candidates;
 pub mod close_helpers;
 pub mod counterfactual;
+pub mod dataset;
 pub mod disagreement;
 pub mod driver;
 pub mod encoding;
@@ -30,6 +31,9 @@ pub use candidates::{CleanSplitCloseWrapper, DEFAULT_CLEAN_SPLIT_SAMPLES};
 pub use counterfactual::{
     CounterfactualRow, CounterfactualSweep, ProbeTarget, probe_position, sweep as sweep_probes,
     write_json as write_counterfactual_json,
+};
+pub use dataset::{
+    SELF_PLAY_AGENTS, Sample, generate as generate_samples, read_binary, write_binary,
 };
 pub use disagreement::{
     CsvRecord, DisagreementRow, action_label, mine_disagreements, read_csv_rows, write_csv,
