@@ -19,7 +19,9 @@ use crate::player::Player;
 use crate::random::RandomPlayer;
 use crate::rule_based::RuleBasedPlayer;
 use crate::score_aware::{DEFAULT_SCORE_AWARE_SAMPLES, ScoreAwarePlayer};
-use crate::search::SearchPlayer;
+use crate::search::{LeafEvaluator, SearchPlayer};
+use crate::value_model::toy_proxy;
+use std::sync::Arc;
 
 /// Final state of one head-to-head match.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -224,6 +226,10 @@ pub enum BaselineAgent {
     Search(Box<SearchPlayer>),
     ScoreAware(Box<ScoreAwarePlayer>),
     CleanSplitClose(Box<CleanSplitCloseWrapper<RuleBasedPlayer>>),
+    /// `SearchPlayer` with a `LeafEvaluator::ValueModel` leaf. In slice 3 the
+    /// model is the hand-coded `value_model::toy_proxy`; slice 5 swaps it
+    /// for the trained `committed_v1()`.
+    ValueSearch(Box<SearchPlayer>),
 }
 
 /// Default number of belief-sampled worlds the search expands per act
@@ -276,6 +282,10 @@ impl BaselineAgent {
                     CleanSplitCloseWrapper::new(RuleBasedPlayer::new(), k, seed),
                 )))
             }
+            "value-search" => Some(BaselineAgent::ValueSearch(Box::new(
+                SearchPlayer::new(samples, seed)
+                    .with_leaf_evaluator(LeafEvaluator::ValueModel(Arc::new(toy_proxy()))),
+            ))),
             _ => None,
         }
     }
@@ -288,6 +298,7 @@ impl BaselineAgent {
             "search",
             "score-aware",
             "clean-split-close",
+            "value-search",
         ]
     }
 }
@@ -301,6 +312,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Search(p) => p.act(obs, legal),
             BaselineAgent::ScoreAware(p) => p.act(obs, legal),
             BaselineAgent::CleanSplitClose(p) => p.act(obs, legal),
+            BaselineAgent::ValueSearch(p) => p.act(obs, legal),
         }
     }
 
@@ -312,6 +324,7 @@ impl Player for BaselineAgent {
             BaselineAgent::Search(p) => p.notify(event),
             BaselineAgent::ScoreAware(p) => p.notify(event),
             BaselineAgent::CleanSplitClose(p) => p.notify(event),
+            BaselineAgent::ValueSearch(p) => p.notify(event),
         }
     }
 }

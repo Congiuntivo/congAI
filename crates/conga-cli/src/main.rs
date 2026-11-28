@@ -43,8 +43,8 @@ enum Command {
         /// Suit glyphs: `french` (default) uses ♣♦♥♠, `spanish` uses ✦●♡✚.
         #[arg(long, default_value = "french", value_parser = ["french", "spanish", "f", "s"])]
         suits: String,
-        /// Opponent agent: `random`, `greedy`, `rule-based`, `search`, `score-aware` or `clean-split-close`.
-        #[arg(long, default_value = "random", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close"])]
+        /// Opponent agent: `random`, `greedy`, `rule-based`, `search`, `score-aware`, `clean-split-close` or `value-search`.
+        #[arg(long, default_value = "random", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close", "value-search"])]
         ai: String,
         /// Belief-samples per decision for the `search` agent. Ignored
         /// by the other agents.
@@ -131,11 +131,11 @@ enum Command {
     },
     /// Head-to-head evaluation of two baseline agents.
     Eval {
-        /// First agent: `random`, `greedy`, `rule-based`, `search`, `score-aware` or `clean-split-close`.
-        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close"])]
+        /// First agent: `random`, `greedy`, `rule-based`, `search`, `score-aware`, `clean-split-close` or `value-search`.
+        #[arg(long = "a", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close", "value-search"])]
         agent_a: String,
         /// Second agent.
-        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close"])]
+        #[arg(long = "b", value_parser = ["random", "greedy", "rule-based", "search", "score-aware", "clean-split-close", "value-search"])]
         agent_b: String,
         /// Number of matches to play (rounded up to the nearest even
         /// number so every chance stream is run with seats swapped).

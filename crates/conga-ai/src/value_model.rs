@@ -188,6 +188,34 @@ impl From<serde_json::Error> for ValueModelError {
     }
 }
 
+/// Hand-coded toy model used by slice 3 to wire the rollout-leaf
+/// integration before training lands in slice 5. Single linear layer
+/// 261 → 1 with a sigmoid head, weights zero except for the own-score
+/// slot (`OFF_SCORES + 0`, penalised) and the opponent-score slot
+/// (`OFF_SCORES + 1`, rewarded). The output approximates
+/// `sigmoid(4 * (opp_score - own_score) / 100)` — higher own score
+/// (closer to elimination) lowers equity. Not committed as a JSON
+/// asset; regenerated from constants each call. `BaselineAgent::ValueSearch`
+/// uses this until slice 5 swaps it for the trained `committed_v1()`.
+pub fn toy_proxy() -> ValueModel {
+    const OFF_SCORES: usize = 120;
+    let mut row = vec![0.0f32; ENCODING_SIZE];
+    row[OFF_SCORES] = -4.0; // own score / 100 (seat-relative slot 0)
+    row[OFF_SCORES + 1] = 4.0; // opp score / 100 (seat-relative slot 1)
+    ValueModel {
+        schema_version: SCHEMA_VERSION,
+        encoding_version: ENCODING_VERSION,
+        input_size: ENCODING_SIZE,
+        layers: vec![Layer {
+            out_size: 1,
+            activation: Activation::Sigmoid,
+            weights: vec![row],
+            biases: vec![0.0],
+        }],
+        meta: serde_json::json!({"kind": "toy_proxy", "note": "slice-3 placeholder; replaced by committed_v1 in slice 5"}),
+    }
+}
+
 impl ValueModel {
     /// Parse and validate a JSON-encoded model from a string.
     pub fn from_json_str(s: &str) -> Result<Self, ValueModelError> {
